@@ -73,5 +73,5 @@ export function install(argv) {
   log('');
   if (argv['dry-run']) log(c.yellow('dry-run — 아무것도 쓰지 않았다.'));
   else log(c.green(`${wrote}개 파일 설치 완료.`) + (blocked ? c.yellow(` (${blocked}개 건너뜀)`) : ''));
-  log(c.dim('다음: ') + 'anl init' + c.dim('  으로 loop/SPEC.md 를 만든 뒤 직접 채운다.'));
+  log(c.dim('다음: ') + 'anloop init' + c.dim('  으로 loop/SPEC.md 를 만든 뒤 직접 채운다.'));
 }

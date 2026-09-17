@@ -14,7 +14,7 @@ const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'bi
 const run = (args, cwd) => execFileSync('node', [CLI, ...args], { cwd, encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' } });
 
 function tmpRepo() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anl-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anloop-'));
   execFileSync('git', ['init', '-q'], { cwd: dir });
   execFileSync('git', ['config', 'user.email', 't@t'], { cwd: dir });
   execFileSync('git', ['config', 'user.name', 't'], { cwd: dir });
@@ -156,7 +156,7 @@ test('HANDOFF 자리표시자를 종료 신호로 오인하지 않는다', async
 });
 
 test('writeFile 은 같은 내용이면 다시 쓰지 않는다', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anl-w-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anloop-w-'));
   const f = path.join(dir, 'a.md');
   assert.equal(writeFile(f, 'all-night-loop\nx'), 'create');
   assert.equal(writeFile(f, 'all-night-loop\nx'), 'same');

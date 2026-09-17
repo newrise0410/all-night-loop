@@ -31,7 +31,7 @@ export function doctor(argv) {
   const dir = path.join(root, argv.loopDir || 'loop');
   const spec = readIfExists(path.join(dir, 'SPEC.md'));
   if (!spec) {
-    log(`  ${c.yellow('!')} loop/SPEC.md 없음 → ${c.cyan('anl init')}`);
+    log(`  ${c.yellow('!')} loop/SPEC.md 없음 → ${c.cyan('anloop init')}`);
   } else if (spec.includes('<검증 명령 1>')) {
     log(`  ${c.yellow('!')} loop/SPEC.md 가 아직 템플릿이다 → 직접 채워야 루프가 돈다`);
   } else {

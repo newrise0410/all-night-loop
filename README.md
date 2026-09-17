@@ -8,15 +8,15 @@
 ```bash
 npm i -g all-night-loop
 
-anl install        # 감지된 도구 전부에 스킬 설치
-anl init           # loop/SPEC.md 생성 → 직접 채운다
-anl loop           # 밤새 돌린다
+anloop install        # 감지된 도구 전부에 스킬 설치
+anloop init           # loop/SPEC.md 생성 → 직접 채운다
+anloop loop           # 밤새 돌린다
 ```
 
 ## 어디에 설치되나
 
-`anl install` 은 저장소를 훑어 설치된 도구를 감지하고, 각 도구의 규약에 맞는 파일을 만든다.
-대상을 직접 지정하려면 `anl install claude cursor`, 전부 설치하려면 `--all`.
+`anloop install` 은 저장소를 훑어 설치된 도구를 감지하고, 각 도구의 규약에 맞는 파일을 만든다.
+대상을 직접 지정하려면 `anloop install claude cursor`, 전부 설치하려면 `--all`.
 
 | 대상 | 생성 파일 | 전역 설치 |
 |---|---|---|
@@ -34,10 +34,10 @@ anl loop           # 밤새 돌린다
 `AGENTS.md` 는 통째로 덮어쓰지 않고 마킹된 블록만 삽입/갱신하므로 기존 내용이 보존된다.
 
 ```bash
-anl install --all              # 이 저장소의 모든 도구
-anl install claude --global    # 모든 프로젝트에서 쓰도록 전역 설치
-anl install --dry-run          # 뭘 할지만 확인
-anl doctor                     # 감지된 도구·CLI·루프 상태 점검
+anloop install --all              # 이 저장소의 모든 도구
+anloop install claude --global    # 모든 프로젝트에서 쓰도록 전역 설치
+anloop install --dry-run          # 뭘 할지만 확인
+anloop doctor                     # 감지된 도구·CLI·루프 상태 점검
 ```
 
 사람이 직접 만든 파일은 덮어쓰지 않는다(`--force` 로만). 같은 내용이면 다시 쓰지 않아 재실행이 멱등이다.
@@ -45,20 +45,20 @@ anl doctor                     # 감지된 도구·CLI·루프 상태 점검
 ## 밤새 돌리기
 
 ```bash
-anl loop                            # 기본: claude
-anl loop --agent codex --max 20
-anl loop --cmd "mycli chat {prompt}"   # 지원 목록에 없는 CLI
+anloop loop                            # 기본: claude
+anloop loop --agent codex --max 20
+anloop loop --cmd "mycli chat {prompt}"   # 지원 목록에 없는 CLI
 ```
 
 내장 실행기: `claude` `codex` `gemini` `cursor` `opencode` `aider`.
 각 CLI의 비대화 실행 플래그는 버전에 따라 달라지므로, 맞지 않으면 `--cmd` 로 직접 지정하면 된다
-(`anl list` 로 현재 매핑 확인).
+(`anloop list` 로 현재 매핑 확인).
 
 한 사이클만 수동으로 돌려보려면 프롬프트를 직접 파이프한다:
 
 ```bash
-claude -p "$(anl prompt)"
-codex exec "$(anl prompt)"
+claude -p "$(anloop prompt)"
+codex exec "$(anloop prompt)"
 ```
 
 Claude Code 안에서는 `/all-night-loop` (1사이클) 또는 `/loop /all-night-loop` (반복).
@@ -81,7 +81,7 @@ Claude Code 안에서는 `/all-night-loop` (1사이클) 또는 `/loop /all-night
 
 ## 상태 파일
 
-`anl init` 이 만든다. **모든 상태는 기억이 아니라 파일에 있다** — 다음 사이클의 에이전트는 기억이 없다.
+`anloop init` 이 만든다. **모든 상태는 기억이 아니라 파일에 있다** — 다음 사이클의 에이전트는 기억이 없다.
 
 | 파일 | 역할 | 누가 쓰나 |
 |---|---|---|
@@ -93,7 +93,7 @@ Claude Code 안에서는 `/all-night-loop` (1사이클) 또는 `/loop /all-night
 ## 지시서 작성 5요소
 
 루프의 품질은 전부 SPEC 에서 결정된다. **루프는 SPEC 보다 똑똑해지지 않는다.**
-`anl guide` 로 전체 가이드(나쁜 예/좋은 예 포함)를 출력한다.
+`anloop guide` 로 전체 가이드(나쁜 예/좋은 예 포함)를 출력한다.
 
 | 요소 | 핵심 |
 |---|---|
@@ -114,14 +114,14 @@ Claude Code 안에서는 `/all-night-loop` (1사이클) 또는 `/loop /all-night
 ## 명령 요약
 
 ```
-anl install [targets...]   스킬 설치 (--all / --global / --dry-run / --force / --dir)
-anl init                   loop/ 상태 파일 생성
-anl loop                   반복 실행 (--agent / --cmd / --max / --sleep)
-anl doctor                 도구·CLI·루프 상태 점검
-anl list                   설치 대상 및 실행기 목록
-anl prompt                 1사이클 프롬프트를 stdout 으로
-anl guide                  지시서 작성 5요소 가이드
-anl uninstall [targets...] 설치 파일·블록 제거 (loop/ 기록은 남긴다)
+anloop install [targets...]   스킬 설치 (--all / --global / --dry-run / --force / --dir)
+anloop init                   loop/ 상태 파일 생성
+anloop loop                   반복 실행 (--agent / --cmd / --max / --sleep)
+anloop doctor                 도구·CLI·루프 상태 점검
+anloop list                   설치 대상 및 실행기 목록
+anloop prompt                 1사이클 프롬프트를 stdout 으로
+anloop guide                  지시서 작성 5요소 가이드
+anloop uninstall [targets...] 설치 파일·블록 제거 (loop/ 기록은 남긴다)
 ```
 
 ## 개발

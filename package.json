@@ -5,7 +5,7 @@
   "type": "module",
   "bin": {
     "all-night-loop": "bin/cli.js",
-    "anl": "bin/cli.js"
+    "anloop": "bin/cli.js"
   },
   "files": [
     "bin",

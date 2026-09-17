@@ -35,7 +35,7 @@ const HELP = `
 ${c.bold('all-night-loop')} — 사람 없이 돌아가는 자율 개발 루프를 모든 LLM 코딩 도구에 설치한다
 
 ${c.bold('사용법')}
-  anl <command> [options]
+  anloop <command> [options]
 
 ${c.bold('명령')}
   ${c.cyan('install')} [targets...]   스킬을 도구에 설치한다 (대상 생략 시 자동 감지)
@@ -63,11 +63,11 @@ ${c.bold('loop 옵션')}
 
 ${c.bold('예시')}
   npm i -g all-night-loop
-  anl install --all              ${c.dim('# 이 저장소의 모든 도구에 설치')}
-  anl install claude --global    ${c.dim('# 모든 프로젝트에서 쓰도록 전역 설치')}
-  anl init                       ${c.dim('# loop/SPEC.md 생성 → 직접 채운다')}
-  anl loop --agent codex --max 20
-  claude -p "$(anl prompt)"      ${c.dim('# 한 사이클만 수동 실행')}
+  anloop install --all              ${c.dim('# 이 저장소의 모든 도구에 설치')}
+  anloop install claude --global    ${c.dim('# 모든 프로젝트에서 쓰도록 전역 설치')}
+  anloop init                       ${c.dim('# loop/SPEC.md 생성 → 직접 채운다')}
+  anloop loop --agent codex --max 20
+  claude -p "$(anloop prompt)"      ${c.dim('# 한 사이클만 수동 실행')}
 `;
 
 async function main() {
@@ -90,7 +90,7 @@ async function main() {
     case 'prompt': return printPrompt(argv);
     case 'guide': return guide(argv);
     case 'uninstall': return uninstall(argv);
-    default: return fail(`알 수 없는 명령: ${cmd}\n${'anl --help'} 를 봐라.`);
+    default: return fail(`알 수 없는 명령: ${cmd}\n${'anloop --help'} 를 봐라.`);
   }
 }
 

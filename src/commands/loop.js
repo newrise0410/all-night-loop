@@ -82,7 +82,7 @@ export async function loop(argv) {
   }
 
   if (!readIfExists(path.join(root, loopDir, 'SPEC.md'))) {
-    fail(`${loopDir}/SPEC.md 가 없다. 먼저 ${c.cyan('anl init')} 을 실행하고 지시서를 채워라.`);
+    fail(`${loopDir}/SPEC.md 가 없다. 먼저 ${c.cyan('anloop init')} 을 실행하고 지시서를 채워라.`);
   }
 
   const prompt = cyclePrompt();

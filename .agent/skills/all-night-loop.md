@@ -99,8 +99,8 @@ HANDOFF에 반드시 들어가야 하는 것: 방금 한 일 / 커밋 해시 / *
 이 스킬은 **한 사이클**만 정의한다. 반복은 바깥 하네스가 돌린다.
 
 ```bash
-anl loop --agent claude     # 또는 codex / gemini / cursor / opencode / aider
-anl loop --cmd "mycli -p {prompt}"   # 임의의 CLI
+anloop loop --agent claude     # 또는 codex / gemini / cursor / opencode / aider
+anloop loop --cmd "mycli -p {prompt}"   # 임의의 CLI
 ```
 
 Claude Code 안에서는 `/loop /all-night-loop` 도 같은 역할을 한다.
