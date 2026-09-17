@@ -306,3 +306,26 @@ test('권한 차단 진단은 관련 있을 때만 참이다', () => {
   assert.ok(looksPermissionBlocked('permission denied'));
   assert.ok(!looksPermissionBlocked('테스트 3개 실패: assertion error'));
 });
+
+test('플러그인 마켓플레이스는 opt-in 이고 --all 에 끼지 않는다', () => {
+  const dir = tmpRepo();
+  run(['install', '--all'], dir);
+  assert.ok(!fs.existsSync(path.join(dir, '.claude-plugin')), '--all 이 배포용 파일까지 만들었다');
+  assert.ok(!fs.existsSync(path.join(dir, 'plugins')));
+
+  run(['install', 'plugin'], dir);
+  const mkt = JSON.parse(fs.readFileSync(path.join(dir, '.claude-plugin', 'marketplace.json'), 'utf8'));
+  assert.equal(mkt.plugins.length, 1);
+  assert.ok(fs.existsSync(path.join(dir, mkt.plugins[0].source)), 'source 경로가 실제로 없다');
+
+  const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'plugins/all-night-loop/.claude-plugin/plugin.json'), 'utf8'));
+  // version 이 package.json 과 갈라지면 사용자에게 업데이트가 안 나간다
+  assert.equal(manifest.version, JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version);
+
+  // 스킬 2개가 plugins/<name>/skills/ 아래에 자동 탐색 가능한 형태로 있어야 한다
+  for (const n of ['all-night-loop', 'all-night-spec']) {
+    assert.ok(fs.existsSync(path.join(dir, `plugins/all-night-loop/skills/${n}/SKILL.md`)), `없음: ${n}`);
+    assert.ok(fs.existsSync(path.join(dir, `plugins/all-night-loop/commands/${n}.md`)));
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+});

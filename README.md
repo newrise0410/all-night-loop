@@ -61,6 +61,30 @@ anloop spec "주제" --interview < answers.txt   # 한 줄에 한 답변
 
 에이전트 안에서 직접 부를 수도 있다: `/all-night-spec 결제 재시도 로직 추가`
 
+## Claude Code 플러그인으로 설치 (자동 업데이트)
+
+Claude Code 만 쓴다면 플러그인이 제일 편하다. **`npm i -g` 를 다시 칠 필요 없이 갱신된다.**
+
+```
+/plugin marketplace add newrise0410/all-night-loop
+/plugin install all-night-loop@anloop
+```
+
+이후 업데이트는 `/plugin marketplace update` 로 카탈로그를 새로고침하면 된다.
+새 버전은 `plugin.json` 의 `version` 이 올라갈 때 나간다 — 이 저장소는 그 값을
+`package.json` 버전과 묶어 두어서 따로 놀지 않는다.
+
+**다만 플러그인은 스킬과 슬래시 명령만 준다.** `anloop loop` · `anloop spec` 같은 CLI 는
+셸 프로그램이라 플러그인으로 배포할 수 없다. 밤새 자동 반복을 돌리거나 Claude Code 외의
+도구(Codex·Cursor·Gemini…)에 설치하려면 npm 쪽이 필요하다.
+
+| | 플러그인 | npm CLI |
+|---|---|---|
+| Claude Code 스킬·명령 | o | o |
+| 자동 업데이트 | o | `npm i -g` 재실행 |
+| `anloop loop` 무인 반복 | x | o |
+| Codex·Cursor·Gemini 등 | x | o |
+
 ## 어디에 설치되나
 
 **스킬 2개**(`all-night-loop` 한 사이클 실행, `all-night-spec` 지시서 작성)를 설치한다.
@@ -201,6 +225,9 @@ anloop list                   설치 대상 및 실행기 목록
 anloop prompt [loop|spec]     프롬프트를 stdout 으로
 anloop guide                  지시서 작성 5요소 가이드
 anloop uninstall [targets...] 설치 파일·블록 제거 (loop/ 기록은 남긴다)
+
+anloop install plugin         이 저장소를 Claude Code 마켓플레이스로 만든다 (배포자용,
+                              --all 에 포함되지 않는다)
 ```
 
 ## 개발

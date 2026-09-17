@@ -7,6 +7,9 @@ export const SKILL_DIR = path.join(PKG_ROOT, 'skill');
 export const TEMPLATE_DIR = path.join(SKILL_DIR, 'templates');
 export const TEMPLATES = ['SPEC', 'BACKLOG', 'HANDOFF', 'JOURNAL'];
 
+/** 플러그인 매니페스트의 version 을 패키지 버전과 묶는다 — 따로 놀면 한쪽만 올라간다. */
+export const PKG_VERSION = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, 'package.json'), 'utf8')).version;
+
 /** 정본 스킬 파일. id 는 CLI·문서에서 쓰는 짧은 이름이다. */
 const SOURCES = [
   { id: 'loop', file: 'loop.md', withTemplates: true },

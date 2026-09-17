@@ -1,0 +1,14 @@
+{
+  "name": "anloop",
+  "owner": {
+    "name": "newrise0410",
+    "url": "https://github.com/newrise0410"
+  },
+  "plugins": [
+    {
+      "name": "all-night-loop",
+      "source": "./plugins/all-night-loop",
+      "description": "지시서를 읽고 작업 하나만 구현·검증·커밋한 뒤 인수인계를 기록하는 자율 개발 루프"
+    }
+  ]
+}

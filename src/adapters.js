@@ -1,4 +1,4 @@
-import { TEMPLATES } from './skill.js';
+import { TEMPLATES, PKG_VERSION } from './skill.js';
 
 /**
  * 도구별 설치 어댑터.
@@ -24,6 +24,9 @@ const SHORT = {
   spec: '주제를 받아 저장소를 조사하고 자율 루프용 지시서(loop/SPEC.md)와 작업 목록(loop/BACKLOG.md)을 작성한다.',
 };
 const shortOf = (skill) => SHORT[skill.id] || skill.description.slice(0, 160);
+
+const MARKETPLACE_NAME = 'anloop';
+const PLUGIN_NAME = 'all-night-loop';
 
 /** AGENTS.md / 기타 지시 파일에 끼워넣는 짧은 포인터. 본문은 별도 파일에 둔다. */
 function pointerBlock() {
@@ -183,6 +186,81 @@ export const adapters = [
           path: `${base}/command/${ctx.skill.name}.md`,
           content: `${frontmatter({ description: shortOf(ctx.skill) })}\n\n${ctx.bundleText}\n`,
         },
+      ];
+    },
+  },
+  {
+    id: 'plugin',
+    label: 'Claude Code 플러그인 마켓플레이스 (배포용)',
+    detect: { project: ['.claude-plugin'], global: [] },
+    scopes: ['project'],
+    // 이건 "이 저장소를 마켓플레이스로 publish" 하기 위한 것이지, 남의 프로젝트에 설치할 것이 아니다.
+    // 그래서 자동 감지와 --all 에서 빼고 이름을 직접 적었을 때만 생성한다.
+    optIn: true,
+    plan: (ctx) => {
+      const root = `plugins/${PLUGIN_NAME}`;
+      const perSkill = [
+        {
+          kind: 'file',
+          path: `${root}/skills/${ctx.skill.name}/SKILL.md`,
+          content: `${frontmatter({ name: ctx.skill.name, description: ctx.skill.description })}\n\n${ctx.skill.body}\n`,
+        },
+        {
+          kind: 'file',
+          path: `${root}/skills/${ctx.skill.name}/reference/spec-writing.md`,
+          content: `${ctx.skill.reference}\n`,
+        },
+        ...(ctx.skill.templates
+          ? TEMPLATES.map((t) => ({
+              kind: 'file',
+              path: `${root}/skills/${ctx.skill.name}/templates/${t}.md`,
+              content: ctx.skill.templates[t],
+            }))
+          : []),
+        {
+          kind: 'file',
+          path: `${root}/commands/${ctx.skill.name}.md`,
+          content: `${frontmatter({ description: shortOf(ctx.skill) })}\n\n${ctx.bundleText}\n`,
+        },
+      ];
+      // 마켓플레이스·매니페스트는 저장소당 하나다. 스킬마다 쓰면 서로 덮어쓴다.
+      if (ctx.skill.id !== 'loop') return perSkill;
+      return [
+        {
+          kind: 'file',
+          path: '.claude-plugin/marketplace.json',
+          content: JSON.stringify(
+            {
+              name: MARKETPLACE_NAME,
+              owner: { name: 'newrise0410', url: 'https://github.com/newrise0410' },
+              plugins: [
+                {
+                  name: PLUGIN_NAME,
+                  source: `./plugins/${PLUGIN_NAME}`,
+                  description: '지시서를 읽고 작업 하나만 구현·검증·커밋한 뒤 인수인계를 기록하는 자율 개발 루프',
+                },
+              ],
+            },
+            null,
+            2,
+          ) + '\n',
+        },
+        {
+          kind: 'file',
+          path: `${root}/.claude-plugin/plugin.json`,
+          content: JSON.stringify(
+            {
+              name: PLUGIN_NAME,
+              // version 을 올려야 사용자에게 업데이트가 나간다 — package.json 과 함께 움직이게 묶는다.
+              version: PKG_VERSION,
+              description: '자율 개발 루프 — 지시서 작성(all-night-spec)과 1사이클 실행(all-night-loop)',
+              homepage: 'https://github.com/newrise0410/all-night-loop',
+            },
+            null,
+            2,
+          ) + '\n',
+        },
+        ...perSkill,
       ];
     },
   },

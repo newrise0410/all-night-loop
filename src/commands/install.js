@@ -30,11 +30,11 @@ export function install(argv) {
 
   let targets;
   if (argv.all) {
-    targets = adapters;
+    targets = adapters.filter((a) => !a.optIn);
   } else if (argv._.length) {
     targets = argv._.map((id) => byId(id) || fail(`알 수 없는 대상: ${id}\n사용 가능: ${ids.join(', ')}`));
   } else {
-    const found = detectInstalled(root);
+    const found = detectInstalled(root).filter((a) => !a.optIn);
     targets = found.length ? found : [byId('agents'), byId('claude')];
     log(
       c.dim(
