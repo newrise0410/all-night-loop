@@ -36,11 +36,19 @@ test('스킬 2종이 frontmatter 와 함께 로드된다', () => {
   assert.equal(Object.keys(s.templates).length, 4);
 });
 
-test('번들은 자족적이다 — 절차와 SPEC 작성 가이드를 모두 담는다', () => {
-  const b = bundle();
-  assert.ok(b.includes('## 실행 순서'));
-  assert.ok(b.includes('지시서(SPEC) 작성 가이드'));
-  assert.ok(!b.includes("'''"), 'TOML 리터럴 문자열을 깨뜨릴 수 있다');
+test('번들: 실행용은 가이드를 빼고, 작성용은 담는다', () => {
+  const loopBundle = bundle(getSkill('loop'));
+  assert.ok(loopBundle.includes('## 실행 순서'));
+  // 루프는 SPEC 을 읽고 실행할 뿐 작성하지 않는다 — 가이드는 매 사이클 낭비다
+  assert.ok(!loopBundle.includes('지시서(SPEC) 작성'), '실행 번들에 작성 가이드가 붙었다');
+
+  const specBundle = bundle(getSkill('spec'));
+  assert.ok(specBundle.includes('작성 5요소 상세'), '작성 번들에 가이드가 빠졌다');
+  assert.ok(specBundle.length > loopBundle.length);
+
+  for (const b of [loopBundle, specBundle]) {
+    assert.ok(!b.includes("'''"), 'TOML 리터럴 문자열을 깨뜨릴 수 있다');
+  }
   assert.ok(cyclePrompt().includes('정확히 한 사이클만'));
 });
 

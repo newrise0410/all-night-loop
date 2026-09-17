@@ -9,7 +9,7 @@ import { spec } from '../src/commands/spec.js';
 import { doctor, list, printPrompt, guide, uninstall } from '../src/commands/misc.js';
 import { c, log, fail } from '../src/util.js';
 
-const BOOL = new Set(['all', 'global', 'force', 'dry-run', 'bundle', 'interview', 'yolo', 'stdin', 'help', 'version']);
+const BOOL = new Set(['all', 'global', 'force', 'dry-run', 'bundle', 'interview', 'yolo', 'stdin', 'skip-spec-check', 'help', 'version']);
 
 /** 의존성 없는 최소 파서. --k=v, --k v, --flag, -h 를 지원한다. */
 function parseArgs(argv) {
@@ -68,6 +68,9 @@ ${c.bold('loop / spec 공통 옵션')}
   --stdin            --cmd 로 지정한 CLI 에 프롬프트를 stdin 으로 넘긴다 (Windows 에서 특히 중요)
   --max <n>          최대 사이클 (기본: 50)
   --sleep <sec>      사이클 간 대기 (기본: 3)
+  --timeout <sec>    사이클 하나의 시간 제한 (기본: 1800). 넘으면 프로세스 트리째 정리한다
+  --max-time <min>   전체 실행 시간 예산. 넘으면 다음 사이클을 시작하지 않는다
+  --skip-spec-check  SPEC 완성도 검사를 건너뛴다
 
 ${c.bold('예시')}
   npm i -g all-night-loop

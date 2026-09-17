@@ -219,7 +219,8 @@ Claude Code 안에서는 `/all-night-loop` (1사이클) 또는 `/loop /all-night
 anloop install [targets...]   스킬 설치 (--all / --global / --dry-run / --force / --dir)
 anloop spec <주제>            지시서·백로그 작성 (--interview / --force)
 anloop init                   loop/ 빈 템플릿 생성
-anloop loop                   반복 실행 (--agent / --cmd / --max / --sleep)
+anloop loop                   반복 실행 (--agent / --cmd / --yolo / --max / --sleep
+                              / --timeout / --max-time / --skip-spec-check)
 anloop doctor                 도구·CLI·루프 상태 점검
 anloop list                   설치 대상 및 실행기 목록
 anloop prompt [loop|spec]     프롬프트를 stdout 으로

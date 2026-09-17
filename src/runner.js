@@ -23,7 +23,7 @@ const WIN_CMDLINE_LIMIT = 8000;
 export const RUNNERS = {
   claude: ['claude', ['-p', '--permission-mode', 'acceptEdits'], true],
   codex: ['codex', ['exec', '-'], true],
-  gemini: ['gemini', ['-p', '{prompt}', '--yolo'], false],
+  gemini: ['gemini', ['-p', '{prompt}'], false],
   cursor: ['cursor-agent', ['-p', '{prompt}'], false],
   opencode: ['opencode', ['run', '{prompt}'], false],
   aider: ['aider', ['--message', '{prompt}', '--yes-always'], false],
@@ -40,7 +40,7 @@ export const RUNNERS = {
 export const YOLO_RUNNERS = {
   claude: ['claude', ['-p', '--dangerously-skip-permissions'], true],
   codex: ['codex', ['exec', '--dangerously-bypass-approvals-and-sandbox', '-'], true],
-  gemini: RUNNERS.gemini,
+  gemini: ['gemini', ['-p', '{prompt}', '--yolo'], false],
   cursor: ['cursor-agent', ['-p', '{prompt}', '--force'], false],
   opencode: RUNNERS.opencode,
   aider: RUNNERS.aider,
@@ -116,15 +116,29 @@ export function checkWindowsLimits({ cmd, useStdin }, prompt) {
  * 에이전트를 한 번 돌린다. 출력은 그대로 흘려보내면서 종료 신호 탐지용으로 모은다.
  * input 이 있으면 stdin 으로 넣고 닫는다.
  */
-export function runOnce(cmd, args, cwd, input = null) {
+export function runOnce(cmd, args, cwd, input = null, timeoutMs = 0) {
   return new Promise((resolve) => {
     // Windows 의 claude/codex 등은 .cmd 셸 스크립트라 shell 없이는 spawn 이 ENOENT 로 죽는다.
     const child = spawn(cmd, args, {
       cwd,
       stdio: [input === null ? 'ignore' : 'pipe', 'pipe', 'pipe'],
       shell: WIN,
+      // 자식이 또 자식을 만든다(에이전트 → 셸 → 테스트 러너). 프로세스 그룹째 죽여야 정리된다.
+      detached: !WIN,
     });
     let out = '';
+    let timedOut = false;
+    let timer = null;
+    const done = (payload) => {
+      if (timer) clearTimeout(timer);
+      resolve(payload);
+    };
+    if (timeoutMs > 0) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        killTree(child);
+      }, timeoutMs);
+    }
     const tee = (stream, dest) =>
       stream.on('data', (b) => {
         out += b.toString();
@@ -138,9 +152,37 @@ export function runOnce(cmd, args, cwd, input = null) {
       });
       child.stdin.end(input);
     }
-    child.on('error', (e) => resolve({ code: -1, out, error: e }));
-    child.on('close', (code) => resolve({ code, out }));
+    child.on('error', (e) => done({ code: -1, out, error: e, timedOut }));
+    child.on('close', (code) => done({ code: timedOut ? -2 : code, out, timedOut }));
   });
+}
+
+/**
+ * 프로세스 트리를 정리한다.
+ * 왜 자식만 죽이면 안 되는가: 에이전트는 셸·테스트 러너를 또 띄운다. 부모만 죽이면
+ * 손자 프로세스가 남아 계속 토큰과 CPU 를 쓴다.
+ */
+function killTree(child) {
+  try {
+    if (WIN) {
+      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+    } else {
+      process.kill(-child.pid, 'SIGTERM');
+      setTimeout(() => {
+        try {
+          process.kill(-child.pid, 'SIGKILL');
+        } catch {
+          /* 이미 종료됨 */
+        }
+      }, 5000).unref();
+    }
+  } catch {
+    try {
+      child.kill('SIGKILL');
+    } catch {
+      /* 이미 종료됨 */
+    }
+  }
 }
 
 /** 실행 전에 명령이 존재하는지 확인해 준다 — ENOENT 스택보다 친절한 메시지를 주려고. */

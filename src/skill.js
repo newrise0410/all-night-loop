@@ -63,31 +63,86 @@ export const loadSkill = () => getSkill('loop');
  * 스킬 디렉터리 개념이 없는 도구(Cursor/Gemini/Copilot 등)를 위한 단일 파일 번들.
  * 참조 가이드를 부록으로 붙여 파일 하나로 자족하게 만든다.
  */
-export function bundle(skill = loadSkill()) {
-  const appendix =
-    skill.id === 'spec'
-      ? ['# 부록 — 지시서(SPEC) 작성 5요소 상세', '', '> 위 절차 3단계에서 쓸 기준이다.', '']
-      : [
-          '# 부록 — 지시서(SPEC) 작성 가이드',
-          '',
-          '> `loop/SPEC.md` 가 비어 있거나 없을 때만 필요하다. 이미 채워져 있으면 읽지 않아도 된다.',
-          '',
-        ];
-  return [`# ${skill.name}`, '', skill.body, '', '---', '', ...appendix, stripH1(skill.reference)].join('\n');
+/**
+ * withGuide: SPEC 작성 가이드(2.6천자)를 붙일지.
+ *
+ * 왜 기본이 false 인가: 루프는 이미 작성된 SPEC 을 "읽고 실행"할 뿐 작성하지 않는다.
+ * 가이드를 매 사이클 보내면 실행 프롬프트의 38%가 안 쓰는 내용이 된다 — 50사이클이면
+ * 13만자를 반복 전송한다. "있어도 안 읽으면 된다"는 문장은 입력량을 줄이지 못한다.
+ */
+export function bundle(skill = loadSkill(), { withGuide = skill.id === 'spec' } = {}) {
+  const head = [`# ${skill.name}`, '', skill.body];
+  if (!withGuide) return head.join('\n');
+  return [
+    ...head,
+    '',
+    '---',
+    '',
+    '# 부록 — 지시서(SPEC) 작성 5요소 상세',
+    '',
+    '> 위 절차 3단계에서 쓸 기준이다.',
+    '',
+    stripH1(skill.reference),
+  ].join('\n');
 }
 
 function stripH1(md) {
   return md.replace(/^#\s+.*\r?\n+/, '');
 }
 
-/** 어느 도구에서든 붙여넣어 쓸 수 있는 1사이클 실행 프롬프트. */
-export function cyclePrompt(skill = loadSkill()) {
-  return [
+/** 스킬 본문의 `loop/` 경로를 실제 상태 디렉터리로 바꾼다. */
+function retargetLoopDir(text, loopDir) {
+  if (loopDir === 'loop') return text;
+  return text
+    .replace(/\bloop\/(SPEC|BACKLOG|HANDOFF|JOURNAL)\.md/g, `${loopDir}/$1.md`)
+    .replace(/`loop\/`/g, `\`${loopDir}/\``)
+    .replace(/\bloop\/\.state\b/g, `${loopDir}/.state`);
+}
+
+export const STATE_DIR = '.state';
+export const RESULT_FILE = 'cycle.json';
+
+/**
+ * 1사이클 실행 프롬프트.
+ * runId/cycle 을 실어 보내는 이유: 에이전트가 쓴 결과가 **이번 사이클의 것인지** 확인해야
+ * 지난 사이클의 낡은 상태를 종료 신호로 오인하지 않는다.
+ */
+export function cyclePrompt(skill = loadSkill(), { loopDir = 'loop', runId = null, cycle = null } = {}) {
+  const head = [
     '아래 절차를 **정확히 한 사이클만** 수행하라. 작업 하나를 끝내고 커밋·기록한 뒤 멈춘다.',
     '여러 작업을 이어서 하지 마라.',
-    '',
-    bundle(skill),
-  ].join('\n');
+  ];
+  if (runId && cycle) {
+    head.push(
+      '',
+      '## 이번 사이클',
+      '',
+      `- run_id: \`${runId}\``,
+      `- cycle: \`${cycle}\``,
+      '',
+      `마지막 단계에서 \`${loopDir}/${STATE_DIR}/${RESULT_FILE}\` 에 **이 값 그대로** 아래 JSON 을 써라.`,
+      '바깥 하네스는 이 파일만 보고 루프를 계속할지 정한다. run_id/cycle 이 다르면 무시된다.',
+      '',
+      '```json',
+      '{',
+      `  "run_id": "${runId}",`,
+      `  "cycle": ${cycle},`,
+      '  "task": "T001",',
+      '  "status": "done | all_done | blocked | needs_spec",',
+      '  "verified": "실행한 검증 명령과 결과",',
+      '  "commit": "작업 커밋 해시 (없으면 null)"',
+      '}',
+      '```',
+      '',
+      '- `done` — 작업 하나를 끝냈고 남은 작업이 있다',
+      '- `all_done` — BACKLOG 에 `[ ]`/`[~]` 가 하나도 없다',
+      '- `blocked` — 3회 실패 등으로 사람이 필요하다 (커밋하지 않았다)',
+      '- `needs_spec` — 지시서가 모호해 판단 불가',
+      '',
+      '**검증을 실제로 통과하지 않았다면 `done`/`all_done` 을 쓰지 마라.**',
+    );
+  }
+  return [...head, '', retargetLoopDir(bundle(skill, { withGuide: false }), loopDir)].join('\n');
 }
 
 /**

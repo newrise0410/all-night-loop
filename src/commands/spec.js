@@ -152,7 +152,7 @@ function draftFromAnswers(topic, answers, dir) {
     [
       '# BACKLOG',
       '',
-      '상태: `[ ]` 대기 · `[~]` 진행중 · `[x]` 완료 · `[!]` 막힘',
+      '상태: `[ ]` 대기 · `[~]` 진행중 · `[x]` 완료 · `[!]` 막힘 · `[?]` 제안(루프는 실행하지 않는다)',
       '',
       '## 진행중',
       '',
@@ -204,7 +204,7 @@ export async function spec(argv) {
   log(c.bold('\n지시서 작성') + c.dim(` — ${cmd} · ${loopDir}/SPEC.md`));
   warnIfMissing(cmd);
 
-  const { code, error } = await runOnce(cmd, buildArgs(argTemplate, prompt, useStdin), root, useStdin ? prompt : null);
+  const { code, error } = await runOnce(cmd, buildArgs(argTemplate, prompt, useStdin), root, useStdin ? prompt : null, Number(argv.timeout ?? 1800) * 1000);
 
   if (error || code !== 0) {
     warn(error ? `${cmd} 실행 실패: ${error.message}` : `${cmd} 가 종료코드 ${code} 로 끝났다.`);
