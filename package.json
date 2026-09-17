@@ -1,0 +1,36 @@
+{
+  "name": "all-night-loop",
+  "version": "0.1.0",
+  "description": "Autonomous overnight dev loop as a portable skill — installs into Claude Code, Codex, Cursor, Gemini CLI, Copilot, Cline, Windsurf, OpenCode, and any AGENTS.md agent.",
+  "type": "module",
+  "bin": {
+    "all-night-loop": "bin/cli.js",
+    "anl": "bin/cli.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "skill",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "skill",
+    "autonomous",
+    "claude-code",
+    "codex",
+    "cursor",
+    "gemini-cli",
+    "copilot",
+    "agents.md",
+    "llm"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}
