@@ -11,7 +11,8 @@
     "bin",
     "src",
     "skill",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18.17"
@@ -31,6 +32,16 @@
   ],
   "license": "MIT",
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "prepublishOnly": "npm test"
+  },
+  "author": "newrise0410",
+  "homepage": "https://github.com/newrise0410/all-night-loop#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/newrise0410/all-night-loop.git"
+  },
+  "bugs": {
+    "url": "https://github.com/newrise0410/all-night-loop/issues"
   }
 }
