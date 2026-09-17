@@ -7,6 +7,7 @@
 
 ```bash
 npm i -g all-night-loop
+# 또는 레지스트리 없이: npm i -g github:newrise0410/all-night-loop
 
 anloop install                  # 감지된 도구 전부에 스킬 설치
 anloop spec "주제" --interview   # 문답으로 지시서·백로그 작성
@@ -191,6 +192,9 @@ anloop uninstall [targets...] 설치 파일·블록 제거 (loop/ 기록은 남�
 ## 개발
 
 ```bash
+git clone https://github.com/newrise0410/all-night-loop
+cd all-night-loop
+npm link          # 이 저장소를 전역 CLI 로 연결 (수정 즉시 반영)
 npm test          # node:test, 의존성 0
 ```
 
