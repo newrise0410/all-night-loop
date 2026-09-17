@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { cyclePrompt, STATE_DIR, RESULT_FILE } from '../skill.js';
-import { resolveRunner, runOnce, buildArgs, checkWindowsLimits, warnIfMissing, looksPermissionBlocked } from '../runner.js';
+import { resolveRunner, withUsage, runOnce, buildArgs, checkWindowsLimits, warnIfMissing, looksPermissionBlocked } from '../runner.js';
+import { appendUsage, summarize, supportsUsage, fmtTokens } from '../usage.js';
 import { c, log, warn, fail, readIfExists, findRoot } from '../util.js';
 
 const STATUSES = ['done', 'all_done', 'blocked', 'needs_spec'];
@@ -76,7 +77,14 @@ export function readResult(root, loopDir, runId, cycle) {
   // 지난 사이클의 낡은 파일을 이번 결과로 오인하면 잘못 멈추거나 잘못 계속한다.
   if (d.run_id !== runId || Number(d.cycle) !== cycle) return { ok: false, reason: 'stale' };
   if (!STATUSES.includes(d.status)) return { ok: false, reason: 'bad-status' };
-  return { ok: true, status: d.status, task: d.task, verified: d.verified, commit: d.commit };
+  return {
+    ok: true,
+    status: d.status,
+    task: d.task,
+    verified: d.verified,
+    commit: d.commit,
+    verify_attempts: Number.isFinite(Number(d.verify_attempts)) ? Number(d.verify_attempts) : null,
+  };
 }
 
 /** BACKLOG 에 남은 작업 수. all_done 이 사실인지 교차 검증한다. */
@@ -100,6 +108,25 @@ export function specReadiness(root, loopDir) {
   return { ready: true, placeholders };
 }
 
+/**
+ * 운영 기록이 커지면 매 사이클 입력이 같이 커진다.
+ * HANDOFF 는 "다음 세션이 즉시 출발할 수 있는 최소한"이어야 하고, 완료 백로그는 DONE.md 로 뺀다.
+ */
+function warnIfBloated(root, loopDir) {
+  const limits = { 'HANDOFF.md': 4000, 'BACKLOG.md': 12000 };
+  for (const [name, cap] of Object.entries(limits)) {
+    const text = readIfExists(path.join(root, loopDir, name));
+    if (text && text.length > cap) {
+      warn(
+        `${loopDir}/${name} 가 ${text.length}자다 (권장 ${cap}자 이하). ` +
+          (name === 'BACKLOG.md'
+            ? `완료 항목을 ${loopDir}/DONE.md 로 옮겨라.`
+            : '다음 사이클 입력이 그만큼 커진다 — 핵심만 남겨라.'),
+      );
+    }
+  }
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function hintYolo() {
@@ -118,8 +145,19 @@ export async function loop(argv) {
   const cycleTimeout = Number(argv.timeout ?? 1800) * 1000;
   const totalBudgetMs = argv['max-time'] ? Number(argv['max-time']) * 60_000 : null;
 
-  const runner = resolveRunner(argv);
-  const { cmd, argTemplate, useStdin } = runner;
+  const budgetUsd = argv['budget-usd'] != null ? Number(argv['budget-usd']) : null;
+  // 예산을 걸려면 측정해야 한다 — --budget-usd 는 --usage 를 함축한다.
+  const wantUsage = Boolean(argv.usage) || budgetUsd != null;
+
+  const baseRunner = resolveRunner(argv);
+  if (wantUsage && !supportsUsage(baseRunner.agent)) {
+    warn(
+      baseRunner.agent
+        ? `${baseRunner.agent} 는 사용량 보고를 지원하지 않는다. 시간만 기록한다.`
+        : '--cmd 로 지정한 CLI 는 사용량 보고를 파싱할 수 없다. 시간만 기록한다.',
+    );
+  }
+  const { cmd, useStdin } = baseRunner;
 
   if (!argv['skip-spec-check']) {
     const readiness = specReadiness(root, loopDir);
@@ -141,10 +179,18 @@ export async function loop(argv) {
   fs.writeFileSync(path.join(stateDir, '.gitignore'), '*\n');
 
   log(c.bold('all-night-loop') + c.dim(` — ${cmd} · run ${runId} · 최대 ${max} 사이클 · ${root}`));
-  log(c.dim(`  사이클 제한 ${cycleTimeout / 1000}초${totalBudgetMs ? ` · 전체 ${totalBudgetMs / 60000}분` : ''}`));
+  log(
+    c.dim(
+      `  사이클 제한 ${cycleTimeout / 1000}초` +
+        (totalBudgetMs ? ` · 전체 ${totalBudgetMs / 60000}분` : '') +
+        (budgetUsd != null ? ` · 예산 $${budgetUsd}` : '') +
+        (wantUsage ? ` · 사용량 기록 ${loopDir}/USAGE.jsonl` : ''),
+    ),
+  );
 
   if (argv['dry-run']) {
-    log(c.yellow('dry-run'), c.dim(`${cmd} ${argTemplate.join(' ')}${useStdin ? '  < (프롬프트는 stdin)' : ''}`));
+    const shown = withUsage(baseRunner, { budgetRemaining: budgetUsd });
+    log(c.yellow('dry-run'), c.dim(`${cmd} ${shown.argTemplate.join(' ')}${useStdin ? '  < (프롬프트는 stdin)' : ''}`));
     return;
   }
   warnIfMissing(cmd);
@@ -152,6 +198,7 @@ export async function loop(argv) {
   const startedAt = Date.now();
   let idleStreak = 0;
   let failStreak = 0;
+  let spentUsd = 0;
 
   for (let i = 1; i <= max; i++) {
     if (totalBudgetMs && Date.now() - startedAt > totalBudgetMs) {
@@ -159,9 +206,18 @@ export async function loop(argv) {
       return;
     }
 
+    if (budgetUsd != null && spentUsd >= budgetUsd) {
+      log(c.yellow(`\n예산 $${budgetUsd} 를 모두 썼다 ($${spentUsd.toFixed(2)}). 루프를 멈춘다.`));
+      return;
+    }
+
     log(c.cyan(`\n──── cycle ${i}/${max} ${'─'.repeat(Math.max(0, 40 - String(i).length))}`));
     fs.rmSync(path.join(stateDir, RESULT_FILE), { force: true });
+    warnIfBloated(root, loopDir);
 
+    const runner = wantUsage
+      ? withUsage(baseRunner, { budgetRemaining: budgetUsd == null ? null : budgetUsd - spentUsd })
+      : { ...baseRunner, usage: null };
     const prompt = cyclePrompt(undefined, { loopDir, runId, cycle: i });
     checkWindowsLimits(runner, prompt);
 
@@ -169,10 +225,11 @@ export async function loop(argv) {
     const cycleStart = Date.now();
     const { code, out, error, timedOut } = await runOnce(
       cmd,
-      buildArgs(argTemplate, prompt, useStdin),
+      buildArgs(runner.argTemplate, prompt, useStdin),
       root,
       useStdin ? prompt : null,
       cycleTimeout,
+      Boolean(runner.usage),
     );
     const took = Math.round((Date.now() - cycleStart) / 1000);
 
@@ -181,11 +238,38 @@ export async function loop(argv) {
     const after = progressFingerprint(root, loopDir);
     const progress = madeProgress(before, after);
     const result = readResult(root, loopDir, runId, i);
+    const u = runner.usage ? runner.usage(out) : null;
+
+    // 계측 모드에서는 raw 출력을 흘리지 않았으므로 에이전트의 마지막 메시지를 여기서 보여준다.
+    if (runner.usage && u && u.text) log(u.text.trim());
+
+    if (wantUsage) {
+      if (u && u.cost_usd) spentUsd += u.cost_usd;
+      appendUsage(root, loopDir, {
+        ts: new Date().toISOString(),
+        run_id: runId,
+        cycle: i,
+        agent: baseRunner.agent || 'custom',
+        task: result.ok ? result.task : null,
+        status: result.ok ? result.status : `no-result(${result.reason})`,
+        exit_code: code,
+        timed_out: Boolean(timedOut),
+        progressed: progress,
+        duration_s: took,
+        verify_attempts: result.ok ? result.verify_attempts : null,
+        ...(u || {}),
+        text: undefined,
+      });
+    }
 
     log(
       c.dim(
         `  ${took}초 · 종료코드 ${code}${timedOut ? ' (시간 초과)' : ''} · ` +
-          `결과 ${result.ok ? result.status : `없음(${result.reason})`} · 진전 ${progress ? 'o' : 'x'}`,
+          `결과 ${result.ok ? result.status : `없음(${result.reason})`} · 진전 ${progress ? 'o' : 'x'}` +
+          (u
+            ? ` · $${(u.cost_usd ?? 0).toFixed(3)}${u.turns ? ` · ${u.turns}턴` : ''}` +
+              ` · in ${fmtTokens(u.input_tokens)} / cache ${fmtTokens(u.cache_read_tokens)} / out ${fmtTokens(u.output_tokens)}`
+            : ''),
       ),
     );
 
@@ -234,4 +318,15 @@ export async function loop(argv) {
     if (i < max && pause > 0) await sleep(pause * 1000);
   }
   log(c.yellow(`\n최대 사이클(${max})에 도달했다.`));
+}
+
+/** 누적 사용량을 사람이 읽을 형태로. `anloop usage` 가 쓴다. */
+export function formatSummary(rows) {
+  const t = summarize(rows);
+  return [
+    `사이클 ${t.cycles}회 · ${Math.round(t.duration_s / 60)}분 · $${t.cost_usd.toFixed(2)}${t.turns ? ` · ${t.turns}턴` : ''}`,
+    `  입력 ${fmtTokens(t.input_tokens)} · 캐시생성 ${fmtTokens(t.cache_creation_tokens)} · ` +
+      `캐시읽기 ${fmtTokens(t.cache_read_tokens)} · 출력 ${fmtTokens(t.output_tokens)}`,
+    `  ${Object.entries(t.byStatus).map(([k, v]) => `${k} ${v}`).join(' · ') || '기록 없음'}`,
+  ].join('\n');
 }

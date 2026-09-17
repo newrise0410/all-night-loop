@@ -4,6 +4,8 @@ import { loadSkill, loadSkills, getSkill, bundle, cyclePrompt } from '../skill.j
 import { c, log, fail, expand, exists, removeBlock, findRoot, readIfExists } from '../util.js';
 import { RUNNERS, which } from '../runner.js';
 import fs from 'node:fs';
+import { readUsage, usagePath } from '../usage.js';
+import { formatSummary } from './loop.js';
 
 /** 한글은 터미널에서 두 칸을 먹는다. 표가 어긋나지 않게 표시폭 기준으로 채운다. */
 const width = (s) => [...s].reduce((n, ch) => n + (ch.codePointAt(0) > 0x1100 ? 2 : 1), 0);
@@ -89,4 +91,39 @@ export function uninstall(argv) {
     }
   }
   log(c.dim('\nloop/ 의 SPEC·BACKLOG·HANDOFF·JOURNAL 은 남겨뒀다 — 작업 기록이라 직접 지워야 한다.'));
+}
+
+export function usage(argv) {
+  const root = argv.dir ? path.resolve(argv.dir) : findRoot();
+  const loopDir = argv.loopDir || 'loop';
+  const rows = readUsage(root, loopDir);
+  if (!rows.length) {
+    log(c.yellow(`${loopDir}/USAGE.jsonl 에 기록이 없다.`));
+    log(c.dim('  기록하려면: ') + c.cyan('anloop loop --usage') + c.dim('  (--budget-usd 를 주면 자동으로 켜진다)'));
+    return;
+  }
+  const runs = [...new Set(rows.map((r) => r.run_id))];
+  log(c.bold('전체') + c.dim(` — ${runs.length}개 실행 · ${usagePath(root, loopDir)}`));
+  log(formatSummary(rows));
+
+  if (argv.all || runs.length === 1) {
+    for (const id of runs) {
+      const mine = rows.filter((r) => r.run_id === id);
+      log('');
+      log(c.bold(`run ${id}`) + c.dim(` — ${mine[0].ts?.slice(0, 16).replace('T', ' ')}`));
+      log(formatSummary(mine));
+      for (const r of mine) {
+        const cost = r.cost_usd != null ? `$${Number(r.cost_usd).toFixed(3)}` : '—';
+        log(
+          c.dim(
+            `    #${r.cycle} ${pad(r.task || '-', 8)} ${pad(r.status || '-', 14)} ` +
+              `${pad(`${r.duration_s ?? '-'}초`, 7)} ${pad(cost, 8)}` +
+              (r.verify_attempts ? ` 검증 ${r.verify_attempts}회` : ''),
+          ),
+        );
+      }
+    }
+  } else {
+    log(c.dim('\n  실행별 내역: ') + c.cyan('anloop usage --all'));
+  }
 }

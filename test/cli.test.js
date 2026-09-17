@@ -44,7 +44,11 @@ test('번들: 실행용은 가이드를 빼고, 작성용은 담는다', () => {
 
   const specBundle = bundle(getSkill('spec'));
   assert.ok(specBundle.includes('작성 5요소 상세'), '작성 번들에 가이드가 빠졌다');
-  assert.ok(specBundle.length > loopBundle.length);
+  // 크기 비교로는 확인할 수 없다 — 두 스킬 본문 길이가 서로 독립적으로 변한다.
+  assert.ok(
+    specBundle.length > getSkill('spec').body.length + 2000,
+    '작성 번들에 가이드가 실제로 붙지 않았다',
+  );
 
   for (const b of [loopBundle, specBundle]) {
     assert.ok(!b.includes("'''"), 'TOML 리터럴 문자열을 깨뜨릴 수 있다');

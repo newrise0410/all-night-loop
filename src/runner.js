@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { c, fail, warn } from './util.js';
+import { USAGE_SUPPORT } from './usage.js';
 
 const WIN = process.platform === 'win32';
 
@@ -89,7 +90,21 @@ export function resolveRunner(argv) {
   if (!found) {
     fail(`모르는 에이전트: ${agent}\n사용 가능: ${Object.keys(RUNNERS).join(', ')}\n또는 --cmd "mycli -p {prompt}"`);
   }
-  return { cmd: found[0], argTemplate: found[1], useStdin: found[2] };
+  return { cmd: found[0], argTemplate: found[1], useStdin: found[2], agent };
+}
+
+/**
+ * 계측 모드에 필요한 인자를 덧붙인다.
+ * 지원하지 않는 에이전트나 --cmd 로 직접 지정한 경우에는 아무것도 하지 않는다.
+ */
+export function withUsage(runner, { budgetRemaining = null } = {}) {
+  const sup = runner.agent && USAGE_SUPPORT[runner.agent];
+  if (!sup) return { ...runner, usage: null };
+  return {
+    ...runner,
+    argTemplate: [...runner.argTemplate, ...sup.args({ budgetRemaining })],
+    usage: sup.parse,
+  };
 }
 
 /** 프롬프트를 실제 인자 배열로 펼친다. stdin 방식이면 argv 는 그대로 둔다. */
@@ -116,7 +131,7 @@ export function checkWindowsLimits({ cmd, useStdin }, prompt) {
  * 에이전트를 한 번 돌린다. 출력은 그대로 흘려보내면서 종료 신호 탐지용으로 모은다.
  * input 이 있으면 stdin 으로 넣고 닫는다.
  */
-export function runOnce(cmd, args, cwd, input = null, timeoutMs = 0) {
+export function runOnce(cmd, args, cwd, input = null, timeoutMs = 0, quiet = false) {
   return new Promise((resolve) => {
     // Windows 의 claude/codex 등은 .cmd 셸 스크립트라 shell 없이는 spawn 이 ENOENT 로 죽는다.
     const child = spawn(cmd, args, {
@@ -144,7 +159,9 @@ export function runOnce(cmd, args, cwd, input = null, timeoutMs = 0) {
         out += b.toString();
         dest.write(b);
       });
-    tee(child.stdout, process.stdout);
+    // 계측 모드에서는 stdout 이 JSON 한 덩어리라 그대로 흘리면 읽을 수 없다. 모으기만 한다.
+    if (quiet) child.stdout.on('data', (b) => (out += b.toString()));
+    else tee(child.stdout, process.stdout);
     tee(child.stderr, process.stderr);
     if (input !== null && child.stdin) {
       child.stdin.on('error', () => {

@@ -181,6 +181,34 @@ Claude Code 안에서는 `/all-night-loop` (1사이클) 또는 `/loop /all-night
 
 `anloop doctor` 의 CLI 감지는 `PATHEXT` 를 따라 `.cmd`/`.exe` 까지 찾는다.
 
+## 사용량 계측
+
+```bash
+anloop loop --usage              # 사이클별 토큰·비용을 loop/USAGE.jsonl 에 기록
+anloop loop --budget-usd 5       # 비용 예산. --usage 를 함축한다
+anloop usage                     # 집계 (--all 로 실행별 내역)
+```
+
+claude 와 codex 를 지원한다. `--cmd` 로 직접 지정한 CLI 는 출력 형식을 알 수 없어 시간만 기록한다.
+
+**토큰을 하나로 합치지 않는다.** `input` · `cache_creation` · `cache_read` 는 단가가 다른
+**별개 카운터**이고 서로 포함 관계가 아니다. 합치면 요금과도 컨텍스트 크기와도 맞지 않는다.
+
+실제 1사이클 측정 예:
+
+```
+#1 T006  done  89초  $0.777  검증 1회
+   입력 18 · 캐시생성 42.0k · 캐시읽기 380.7k · 출력 6.4k · 10턴
+```
+
+**여기서 읽어야 할 것**: 비용을 지배하는 건 프롬프트가 아니라 **캐시 읽기 380.7k** 다.
+한 사이클 안에서 에이전트가 파일을 읽고 도구를 돌릴수록 컨텍스트가 커지고, 그게 매 턴
+다시 청구된다. 실행 프롬프트를 6,785 → 5,537자로 줄인 것(약 600토큰)은 이 앞에서 미미하다.
+**그래서 "작업을 고른 뒤 필요한 것만 읽기"가 프롬프트 다이어트보다 효과가 크다.**
+
+`--budget-usd` 는 두 겹으로 막는다 — 누적 비용이 예산을 넘으면 다음 사이클을 시작하지 않고,
+claude 에는 남은 금액을 `--max-budget-usd` 로 넘겨 한 사이클이 예산을 통째로 태우는 것도 막는다.
+
 ## 상태 파일
 
 `anloop spec` 또는 `anloop init` 이 만든다. **모든 상태는 기억이 아니라 파일에 있다** — 다음 사이클의 에이전트는 기억이 없다.
@@ -190,7 +218,13 @@ Claude Code 안에서는 `/all-night-loop` (1사이클) 또는 `/loop /all-night
 | `loop/SPEC.md` | 지시서. 무엇을/왜/어디까지 | **사람** (또는 `anloop spec`) |
 | `loop/BACKLOG.md` | 작업 목록 `[ ] [~] [x] [!]` | 루프 |
 | `loop/HANDOFF.md` | 다음 세션 인수인계 (매번 덮어씀) | 루프 |
-| `loop/JOURNAL.md` | 사이클별 로그 (append-only) | 루프 |
+| `loop/JOURNAL.md` | 사이클별 로그 (append-only, 루프는 다시 읽지 않음) | 루프 |
+| `loop/DONE.md` | 완료된 백로그 보관 (루프는 다시 읽지 않음) | 루프 |
+| `loop/USAGE.jsonl` | 사이클별 사용량 (`--usage`) | 하네스 |
+| `loop/.state/` | 실행 중 상태. 자동으로 git 에서 제외된다 | 하네스·루프 |
+
+**운영 기록은 매 사이클 입력에 그대로 들어간다.** 그래서 루프는 완료 항목을 `DONE.md` 로
+옮기고 `HANDOFF.md` 를 40줄 이하로 유지한다. 넘으면 하네스가 경고한다.
 
 ## 지시서 작성 5요소
 
@@ -221,6 +255,7 @@ anloop spec <주제>            지시서·백로그 작성 (--interview / --for
 anloop init                   loop/ 빈 템플릿 생성
 anloop loop                   반복 실행 (--agent / --cmd / --yolo / --max / --sleep
                               / --timeout / --max-time / --skip-spec-check)
+anloop usage                  사이클별 사용량·비용 집계 (--all)
 anloop doctor                 도구·CLI·루프 상태 점검
 anloop list                   설치 대상 및 실행기 목록
 anloop prompt [loop|spec]     프롬프트를 stdout 으로

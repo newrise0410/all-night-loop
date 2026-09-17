@@ -6,10 +6,10 @@ import { install } from '../src/commands/install.js';
 import { init } from '../src/commands/init.js';
 import { loop } from '../src/commands/loop.js';
 import { spec } from '../src/commands/spec.js';
-import { doctor, list, printPrompt, guide, uninstall } from '../src/commands/misc.js';
+import { doctor, list, printPrompt, guide, uninstall, usage } from '../src/commands/misc.js';
 import { c, log, fail } from '../src/util.js';
 
-const BOOL = new Set(['all', 'global', 'force', 'dry-run', 'bundle', 'interview', 'yolo', 'stdin', 'skip-spec-check', 'help', 'version']);
+const BOOL = new Set(['all', 'global', 'force', 'dry-run', 'bundle', 'interview', 'yolo', 'stdin', 'skip-spec-check', 'usage', 'all', 'help', 'version']);
 
 /** 의존성 없는 최소 파서. --k=v, --k v, --flag, -h 를 지원한다. */
 function parseArgs(argv) {
@@ -43,6 +43,7 @@ ${c.bold('명령')}
   ${c.cyan('spec')} <주제>            주제로 지시서·백로그를 작성한다 (--interview 로 문답)
   ${c.cyan('init')}                   loop/{SPEC,BACKLOG,HANDOFF,JOURNAL}.md 빈 템플릿 생성
   ${c.cyan('loop')}                   에이전트를 반복 실행해 밤새 돌린다
+  ${c.cyan('usage')}                  사이클별 사용량·비용 집계 (--all 로 실행별 내역)
   ${c.cyan('doctor')}                 감지된 도구·CLI·루프 상태 점검
   ${c.cyan('list')}                   설치 가능한 대상과 실행기 목록
   ${c.cyan('prompt')} [loop|spec]     프롬프트를 stdout 으로 (임의 CLI 에 파이프)
@@ -71,6 +72,8 @@ ${c.bold('loop / spec 공통 옵션')}
   --timeout <sec>    사이클 하나의 시간 제한 (기본: 1800). 넘으면 프로세스 트리째 정리한다
   --max-time <min>   전체 실행 시간 예산. 넘으면 다음 사이클을 시작하지 않는다
   --skip-spec-check  SPEC 완성도 검사를 건너뛴다
+  --usage            사이클별 토큰·비용을 loop/USAGE.jsonl 에 기록 (claude/codex)
+  --budget-usd <n>   전체 비용 예산. 넘으면 다음 사이클을 시작하지 않는다 (--usage 를 함축)
 
 ${c.bold('예시')}
   npm i -g all-night-loop
@@ -98,6 +101,7 @@ async function main() {
     case 'spec': return spec(argv);
     case 'init': return init(argv);
     case 'loop': return loop(argv);
+    case 'usage': return usage(argv);
     case 'doctor': return doctor(argv);
     case 'list': return list(argv);
     case 'prompt': return printPrompt(argv);

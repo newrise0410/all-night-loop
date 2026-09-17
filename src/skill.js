@@ -94,7 +94,8 @@ function stripH1(md) {
 function retargetLoopDir(text, loopDir) {
   if (loopDir === 'loop') return text;
   return text
-    .replace(/\bloop\/(SPEC|BACKLOG|HANDOFF|JOURNAL)\.md/g, `${loopDir}/$1.md`)
+    .replace(/\bloop\/(SPEC|BACKLOG|HANDOFF|JOURNAL|DONE)\.md/g, `${loopDir}/$1.md`)
+    .replace(/\bloop\/USAGE\.jsonl/g, `${loopDir}/USAGE.jsonl`)
     .replace(/`loop\/`/g, `\`${loopDir}/\``)
     .replace(/\bloop\/\.state\b/g, `${loopDir}/.state`);
 }
@@ -130,6 +131,7 @@ export function cyclePrompt(skill = loadSkill(), { loopDir = 'loop', runId = nul
       '  "task": "T001",',
       '  "status": "done | all_done | blocked | needs_spec",',
       '  "verified": "실행한 검증 명령과 결과",',
+      '  "verify_attempts": 1,',
       '  "commit": "작업 커밋 해시 (없으면 null)"',
       '}',
       '```',
@@ -139,10 +141,23 @@ export function cyclePrompt(skill = loadSkill(), { loopDir = 'loop', runId = nul
       '- `blocked` — 3회 실패 등으로 사람이 필요하다 (커밋하지 않았다)',
       '- `needs_spec` — 지시서가 모호해 판단 불가',
       '',
+      '`verify_attempts` 는 검증 명령을 몇 번 돌렸는지다 (한 번에 통과했으면 1).',
       '**검증을 실제로 통과하지 않았다면 `done`/`all_done` 을 쓰지 마라.**',
     );
   }
-  return [...head, '', retargetLoopDir(bundle(skill, { withGuide: false }), loopDir)].join('\n');
+  let body = bundle(skill, { withGuide: false });
+  // 계약을 머리말에 실었으면 본문의 같은 설명은 지운다 — 같은 내용을 두 번 보낼 이유가 없다.
+  if (runId && cycle) body = dropSection(body, '## 루프 종료 신호');
+  return [...head, '', retargetLoopDir(body, loopDir)].join('\n');
+}
+
+/** 마크다운에서 한 섹션을 다음 같은 레벨 제목 직전까지 들어낸다. */
+function dropSection(md, heading) {
+  const start = md.indexOf(`\n${heading}`);
+  if (start === -1) return md;
+  const rest = md.slice(start + 1);
+  const next = rest.indexOf('\n## ', heading.length);
+  return next === -1 ? md.slice(0, start) : md.slice(0, start) + rest.slice(next);
 }
 
 /**
