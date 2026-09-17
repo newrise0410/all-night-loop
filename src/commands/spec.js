@@ -3,7 +3,7 @@ import path from 'node:path';
 import readline from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { specPrompt, loadSkill, TEMPLATES } from '../skill.js';
-import { resolveRunner, runOnce } from '../runner.js';
+import { resolveRunner, runOnce, buildArgs, checkWindowsLimits, warnIfMissing } from '../runner.js';
 import { c, log, warn, fail, findRoot, readIfExists } from '../util.js';
 
 /**
@@ -198,10 +198,13 @@ export async function spec(argv) {
     return;
   }
 
-  const { cmd, argTemplate } = resolveRunner(argv);
+  const runner = resolveRunner(argv);
+  const { cmd, argTemplate, useStdin } = runner;
+  checkWindowsLimits(runner, prompt);
   log(c.bold('\n지시서 작성') + c.dim(` — ${cmd} · ${loopDir}/SPEC.md`));
+  warnIfMissing(cmd);
 
-  const { code, error } = await runOnce(cmd, argTemplate.map((a) => a.replaceAll('{prompt}', prompt)), root);
+  const { code, error } = await runOnce(cmd, buildArgs(argTemplate, prompt, useStdin), root, useStdin ? prompt : null);
 
   if (error || code !== 0) {
     warn(error ? `${cmd} 실행 실패: ${error.message}` : `${cmd} 가 종료코드 ${code} 로 끝났다.`);

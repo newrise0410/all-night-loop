@@ -143,6 +143,20 @@ Claude Code 안에서는 `/all-night-loop` (1사이클) 또는 `/loop /all-night
 에이전트는 stdout 에 `[loop] ALL DONE` 같은 신호를 내고 `loop/HANDOFF.md` 의 `상태` 줄에도 같은 값을 적는다.
 파일 쪽을 우선 신뢰한다 — stdout 은 유실될 수 있지만 파일은 남는다.
 
+## Windows
+
+`anloop install` · `anloop init` 은 그대로 동작한다. `anloop loop` · `anloop spec` 은 에이전트를
+실행해야 해서 주의할 점이 있다.
+
+- `claude` · `codex` 는 Windows 에서 `.cmd` 셸 스크립트라 `cmd.exe` 를 거쳐 실행된다.
+  프롬프트에는 줄바꿈 256개와 `& | < > ^ %` 같은 cmd.exe 메타문자가 들어 있어서,
+  명령줄 인자로 넘기면 셸이 해석해 깨진다. 그래서 **이 둘은 프롬프트를 stdin 으로 넘긴다.**
+- `gemini` · `cursor` · `opencode` · `aider` 는 아직 argv 방식이다. Windows 에서 이들을 쓰면
+  실행 전에 막고 이유를 알려준다 — 조용히 잘린 프롬프트로 도는 것보다 낫다.
+- 직접 지정한 CLI 가 stdin 을 받는다면: `anloop loop --cmd "mycli chat" --stdin`
+
+`anloop doctor` 의 CLI 감지는 `PATHEXT` 를 따라 `.cmd`/`.exe` 까지 찾는다.
+
 ## 상태 파일
 
 `anloop spec` 또는 `anloop init` 이 만든다. **모든 상태는 기억이 아니라 파일에 있다** — 다음 사이클의 에이전트는 기억이 없다.

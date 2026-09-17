@@ -2,7 +2,7 @@ import path from 'node:path';
 import { adapters, byId } from '../adapters.js';
 import { loadSkill, loadSkills, getSkill, bundle, cyclePrompt } from '../skill.js';
 import { c, log, fail, expand, exists, removeBlock, findRoot, readIfExists } from '../util.js';
-import { RUNNERS } from '../runner.js';
+import { RUNNERS, which } from '../runner.js';
 import fs from 'node:fs';
 
 /** 한글은 터미널에서 두 칸을 먹는다. 표가 어긋나지 않게 표시폭 기준으로 채운다. */
@@ -44,18 +44,6 @@ export function doctor(argv) {
   }
 }
 
-function which(cmd) {
-  const dirs = (process.env.PATH || '').split(path.delimiter);
-  for (const d of dirs) {
-    const p = path.join(d, cmd);
-    try {
-      fs.accessSync(p, fs.constants.X_OK);
-      return p;
-    } catch { /* 다음 후보 */ }
-  }
-  return null;
-}
-
 export function list() {
   log(c.bold('설치되는 스킬'));
   for (const s of loadSkills()) log(`  ${c.cyan(pad(s.id, 10))} ${s.name}`);
@@ -66,8 +54,8 @@ export function list() {
   }
   log('');
   log(c.bold('loop 실행기'));
-  for (const [id, [cmd, args]] of Object.entries(RUNNERS)) {
-    log(`  ${c.cyan(pad(id, 10))} ${c.dim(`${cmd} ${args.join(' ')}`)}`);
+  for (const [id, [cmd, args, useStdin]] of Object.entries(RUNNERS)) {
+    log(`  ${c.cyan(pad(id, 10))} ${c.dim(`${cmd} ${args.join(' ')}${useStdin ? '  < stdin' : ''}`)}`);
   }
 }
 

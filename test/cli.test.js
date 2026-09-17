@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { loadSkill, loadSkills, getSkill, bundle, cyclePrompt, specPrompt } from '../src/skill.js';
 import { adapters, byId } from '../src/adapters.js';
 import { upsertBlock, removeBlock, writeFile } from '../src/util.js';
-import { resolveRunner, RUNNERS, YOLO_RUNNERS, looksPermissionBlocked } from '../src/runner.js';
+import { resolveRunner, buildArgs, which, RUNNERS, YOLO_RUNNERS, looksPermissionBlocked } from '../src/runner.js';
 
 const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'cli.js');
 const run = (args, cwd) => execFileSync('node', [CLI, ...args], { cwd, encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' } });
@@ -267,9 +267,38 @@ test('--yolo 는 승인을 건너뛰는 러너를 고른다', () => {
   for (const id of Object.keys(RUNNERS)) assert.ok(YOLO_RUNNERS[id], `yolo 러너 없음: ${id}`);
 });
 
-test('--cmd 는 {prompt} 를 생략해도 마지막 인자로 붙인다', () => {
-  assert.deepEqual(resolveRunner({ cmd: 'mycli chat' }), { cmd: 'mycli', argTemplate: ['chat', '{prompt}'] });
-  assert.deepEqual(resolveRunner({ cmd: 'mycli -p {prompt} --x' }).argTemplate, ['-p', '{prompt}', '--x']);
+test('긴 프롬프트를 받는 러너는 argv 가 아니라 stdin 을 쓴다', () => {
+  // 프롬프트는 여러 줄이고 cmd.exe 메타문자를 담고 있다 — argv 로 넘기면 Windows 에서 깨진다.
+  const p = cyclePrompt();
+  assert.ok(p.includes('\n'), '이 테스트의 전제가 깨졌다');
+  assert.ok(/[&|<>^%]/.test(p), '이 테스트의 전제가 깨졌다');
+  for (const id of ['claude', 'codex']) {
+    for (const table of [RUNNERS, YOLO_RUNNERS]) {
+      const [, args, useStdin] = table[id];
+      assert.equal(useStdin, true, `${id} 는 stdin 을 써야 한다`);
+      assert.ok(!args.some((a) => a.includes('{prompt}')), `${id}: stdin 인데 argv 에 {prompt} 가 남았다`);
+    }
+  }
+});
+
+test('buildArgs 는 stdin 방식일 때 {prompt} 를 펼치지 않는다', () => {
+  assert.deepEqual(buildArgs(['-p', '{prompt}'], 'X', false), ['-p', 'X']);
+  assert.deepEqual(buildArgs(['-p'], 'X', true), ['-p']);
+});
+
+test('--cmd 는 {prompt} 가 없으면 stdin 으로 넘긴다', () => {
+  const noPlaceholder = resolveRunner({ cmd: 'mycli chat' });
+  assert.equal(noPlaceholder.useStdin, true);
+  assert.deepEqual(noPlaceholder.argTemplate, ['chat']);
+  const withPlaceholder = resolveRunner({ cmd: 'mycli -p {prompt} --x' });
+  assert.equal(withPlaceholder.useStdin, false);
+  assert.deepEqual(withPlaceholder.argTemplate, ['-p', '{prompt}', '--x']);
+  assert.equal(resolveRunner({ cmd: 'mycli -p {prompt}', stdin: true }).useStdin, true);
+});
+
+test('which 는 실행 파일을 찾고 없는 것은 null 을 준다', () => {
+  assert.ok(which('node'), 'node 를 못 찾았다');
+  assert.equal(which('이런건없다_zzz'), null);
 });
 
 test('권한 차단 진단은 관련 있을 때만 참이다', () => {

@@ -9,7 +9,7 @@ import { spec } from '../src/commands/spec.js';
 import { doctor, list, printPrompt, guide, uninstall } from '../src/commands/misc.js';
 import { c, log, fail } from '../src/util.js';
 
-const BOOL = new Set(['all', 'global', 'force', 'dry-run', 'bundle', 'interview', 'yolo', 'help', 'version']);
+const BOOL = new Set(['all', 'global', 'force', 'dry-run', 'bundle', 'interview', 'yolo', 'stdin', 'help', 'version']);
 
 /** 의존성 없는 최소 파서. --k=v, --k v, --flag, -h 를 지원한다. */
 function parseArgs(argv) {
@@ -65,6 +65,7 @@ ${c.bold('loop / spec 공통 옵션')}
   --agent <id>       claude | codex | gemini | cursor | opencode | aider  (기본: claude)
   --cmd "<c> {prompt}"  임의 CLI 로 실행
   --yolo             에이전트의 승인 절차를 건너뛴다 (무인 실행에 필요, 신뢰하는 저장소에서만)
+  --stdin            --cmd 로 지정한 CLI 에 프롬프트를 stdin 으로 넘긴다 (Windows 에서 특히 중요)
   --max <n>          최대 사이클 (기본: 50)
   --sleep <sec>      사이클 간 대기 (기본: 3)
 

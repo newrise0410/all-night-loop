@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { cyclePrompt } from '../skill.js';
-import { resolveRunner, runOnce, looksPermissionBlocked } from '../runner.js';
+import { resolveRunner, runOnce, buildArgs, checkWindowsLimits, warnIfMissing, looksPermissionBlocked } from '../runner.js';
 import { c, log, fail, readIfExists, findRoot } from '../util.js';
 
 const STOP_WORDS = ['ALL DONE', 'BLOCKED', 'NEEDS SPEC'];
@@ -47,7 +47,8 @@ export async function loop(argv) {
   const max = Number(argv.max ?? 50);
   const pause = Number(argv.sleep ?? 3);
 
-  const { cmd, argTemplate } = resolveRunner(argv);
+  const runner = resolveRunner(argv);
+  const { cmd, argTemplate, useStdin } = runner;
 
   if (!readIfExists(path.join(root, loopDir, 'SPEC.md'))) {
     fail(
@@ -59,13 +60,15 @@ export async function loop(argv) {
   }
 
   const prompt = cyclePrompt();
-  const args = argTemplate.map((a) => a.replaceAll('{prompt}', prompt));
+  checkWindowsLimits(runner, prompt);
+  const args = buildArgs(argTemplate, prompt, useStdin);
 
   log(c.bold(`all-night-loop`) + c.dim(` — ${cmd} · 최대 ${max} 사이클 · ${root}`));
   if (argv['dry-run']) {
-    log(c.yellow('dry-run'), c.dim(`${cmd} ${argTemplate.join(' ')}`));
+    log(c.yellow('dry-run'), c.dim(`${cmd} ${argTemplate.join(' ')}${useStdin ? '  < (프롬프트는 stdin)' : ''}`));
     return;
   }
+  warnIfMissing(cmd);
 
   let lastHash = headHash(root);
   let idleStreak = 0;
@@ -73,7 +76,7 @@ export async function loop(argv) {
 
   for (let i = 1; i <= max; i++) {
     log(c.cyan(`\n──── cycle ${i}/${max} ${'─'.repeat(Math.max(0, 40 - String(i).length))}`));
-    const { code, out, error } = await runOnce(cmd, args, root);
+    const { code, out, error } = await runOnce(cmd, args, root, useStdin ? prompt : null);
 
     if (error) fail(`${cmd} 실행 실패: ${error.message}\n설치돼 있는지 확인하거나 --cmd 로 직접 지정해라.`);
 
