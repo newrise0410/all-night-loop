@@ -1,21 +1,8 @@
-import { spawn } from 'node:child_process';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { cyclePrompt } from '../skill.js';
+import { resolveRunner, runOnce, looksPermissionBlocked } from '../runner.js';
 import { c, log, fail, readIfExists, findRoot } from '../util.js';
-
-/**
- * 도구별 "프롬프트 하나를 비대화식으로 실행"하는 커맨드.
- * 각 CLI 의 플래그는 버전에 따라 달라진다 — 맞지 않으면 `--cmd` 로 직접 지정하면 된다.
- */
-export const RUNNERS = {
-  claude: ['claude', ['-p', '{prompt}', '--permission-mode', 'acceptEdits']],
-  codex: ['codex', ['exec', '{prompt}']],
-  gemini: ['gemini', ['-p', '{prompt}', '--yolo']],
-  cursor: ['cursor-agent', ['-p', '{prompt}']],
-  opencode: ['opencode', ['run', '{prompt}']],
-  aider: ['aider', ['--message', '{prompt}', '--yes-always']],
-};
 
 const STOP_WORDS = ['ALL DONE', 'BLOCKED', 'NEEDS SPEC'];
 
@@ -43,23 +30,16 @@ function handoffState(root, loopDir) {
   return null;
 }
 
-function runOnce(cmd, args, cwd) {
-  return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
-    let out = '';
-    const tee = (stream, dest) =>
-      stream.on('data', (b) => {
-        out += b.toString();
-        dest.write(b);
-      });
-    tee(child.stdout, process.stdout);
-    tee(child.stderr, process.stderr);
-    child.on('error', (e) => resolve({ code: -1, out, error: e }));
-    child.on('close', (code) => resolve({ code, out }));
-  });
-}
-
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** 권한 때문에 막혔을 때만 띄운다 — 무관한 실패에 위험한 플래그를 권하지 않기 위해서다. */
+function hintYolo() {
+  log('');
+  log(c.yellow('에이전트가 권한 때문에 막힌 것으로 보인다.'));
+  log(c.dim('  기본 러너는 파일 편집만 허용하고 셸을 막는다. 그러면 검증 명령도 git commit 도 못 돌린다.'));
+  log(c.dim('  무인 실행하려면: ') + c.cyan('anloop loop --yolo'));
+  log(c.dim('  --yolo 는 에이전트의 승인 절차를 건너뛴다. 신뢰하는 저장소에서만 써라.'));
+}
 
 export async function loop(argv) {
   const root = argv.dir ? path.resolve(argv.dir) : findRoot();
@@ -67,22 +47,15 @@ export async function loop(argv) {
   const max = Number(argv.max ?? 50);
   const pause = Number(argv.sleep ?? 3);
 
-  let cmd;
-  let argTemplate;
-  if (argv.cmd) {
-    const parts = argv.cmd.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g).map((s) => s.replace(/^["']|["']$/g, ''));
-    cmd = parts[0];
-    argTemplate = parts.slice(1);
-    if (!argTemplate.some((a) => a.includes('{prompt}'))) argTemplate.push('{prompt}');
-  } else {
-    const agent = argv.agent || 'claude';
-    const found = RUNNERS[agent];
-    if (!found) fail(`모르는 에이전트: ${agent}\n사용 가능: ${Object.keys(RUNNERS).join(', ')}\n또는 --cmd "mycli -p {prompt}"`);
-    [cmd, argTemplate] = found;
-  }
+  const { cmd, argTemplate } = resolveRunner(argv);
 
   if (!readIfExists(path.join(root, loopDir, 'SPEC.md'))) {
-    fail(`${loopDir}/SPEC.md 가 없다. 먼저 ${c.cyan('anloop init')} 을 실행하고 지시서를 채워라.`);
+    fail(
+      `${loopDir}/SPEC.md 가 없다.\n` +
+        `  ${c.cyan('anloop spec "주제"')}              주제만 주고 지시서를 만든다\n` +
+        `  ${c.cyan('anloop spec "주제" --interview')}  인터뷰로 상세 지시서를 만든다\n` +
+        `  ${c.cyan('anloop init')}                     빈 템플릿만 만든다`,
+    );
   }
 
   const prompt = cyclePrompt();
@@ -107,7 +80,8 @@ export async function loop(argv) {
     // 1) 에이전트가 명시적으로 종료 신호를 냈나
     const sentinel = STOP_WORDS.find((w) => out.includes(`[loop] ${w}`)) || handoffState(root, loopDir);
     if (sentinel) {
-      log(c.green(`\n루프 종료: ${sentinel}`));
+      log(sentinel === 'ALL DONE' ? c.green(`\n루프 종료: ${sentinel}`) : c.yellow(`\n루프 종료: ${sentinel}`));
+      if (sentinel === 'BLOCKED' && !argv.yolo && !argv.cmd && looksPermissionBlocked(out)) hintYolo();
       return;
     }
 
@@ -127,6 +101,7 @@ export async function loop(argv) {
       log(c.yellow(`  새 커밋 없음 (연속 ${idleStreak}회)`));
       if (idleStreak >= 2) {
         log(c.yellow('\n2회 연속 진전이 없다. 루프를 멈춘다 — loop/HANDOFF.md 를 확인해라.'));
+        if (!argv.yolo && !argv.cmd && looksPermissionBlocked(out)) hintYolo();
         return;
       }
     } else {

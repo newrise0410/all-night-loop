@@ -1,8 +1,8 @@
 import path from 'node:path';
 import { adapters, byId } from '../adapters.js';
-import { loadSkill, bundle, cyclePrompt } from '../skill.js';
-import { c, log, expand, exists, removeBlock, findRoot, readIfExists } from '../util.js';
-import { RUNNERS } from './loop.js';
+import { loadSkill, loadSkills, getSkill, bundle, cyclePrompt } from '../skill.js';
+import { c, log, fail, expand, exists, removeBlock, findRoot, readIfExists } from '../util.js';
+import { RUNNERS } from '../runner.js';
 import fs from 'node:fs';
 
 /** 한글은 터미널에서 두 칸을 먹는다. 표가 어긋나지 않게 표시폭 기준으로 채운다. */
@@ -57,6 +57,9 @@ function which(cmd) {
 }
 
 export function list() {
+  log(c.bold('설치되는 스킬'));
+  for (const s of loadSkills()) log(`  ${c.cyan(pad(s.id, 10))} ${s.name}`);
+  log('');
   log(c.bold('설치 가능한 대상'));
   for (const a of adapters) {
     log(`  ${c.cyan(pad(a.id, 10))} ${a.label} ${c.dim(`[${a.scopes.join(', ')}]`)}`);
@@ -69,7 +72,9 @@ export function list() {
 }
 
 export function printPrompt(argv) {
-  process.stdout.write(argv.bundle ? bundle() : cyclePrompt());
+  const skill = getSkill(argv._[0] || 'loop');
+  if (!skill) return fail(`모르는 스킬: ${argv._[0]} (loop | spec)`);
+  process.stdout.write(argv.bundle || skill.id === 'spec' ? bundle(skill) : cyclePrompt(skill));
   process.stdout.write('\n');
 }
 
@@ -80,11 +85,11 @@ export function guide() {
 export function uninstall(argv) {
   const root = argv.dir ? path.resolve(argv.dir) : findRoot();
   const scope = argv.global ? 'global' : 'project';
-  const skill = loadSkill();
   const targets = argv._.length ? argv._.map(byId).filter(Boolean) : adapters;
   for (const a of targets) {
     if (!a.scopes.includes(scope)) continue;
-    for (const item of a.plan({ skill, bundleText: bundle(skill), scope, root })) {
+    const items = loadSkills().flatMap((skill) => a.plan({ skill, bundleText: bundle(skill), scope, root }));
+    for (const item of items) {
       const abs = item.path.startsWith('~/') ? expand(item.path) : path.join(root, item.path);
       if (item.kind === 'block') {
         const r = removeBlock(abs, { dryRun: argv['dry-run'] });

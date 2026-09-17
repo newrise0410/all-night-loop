@@ -19,19 +19,26 @@ const runLine = '한 사이클만 수행하고 멈춘다. 이어서 다음 작�
 
 // 한 줄짜리 설명 칸(Cursor/Windsurf 의 rule description)은 길면 잘린다.
 // 원본 description 을 자르면 문장 중간에서 끊기므로 전용 요약을 쓴다.
-const SHORT = '자율 개발 루프 한 사이클: 지시서를 읽고 작업 하나만 구현·검증·커밋한 뒤 인수인계를 기록하고 멈춘다.';
+const SHORT = {
+  loop: '자율 개발 루프 한 사이클: 지시서를 읽고 작업 하나만 구현·검증·커밋한 뒤 인수인계를 기록하고 멈춘다.',
+  spec: '주제를 받아 저장소를 조사하고 자율 루프용 지시서(loop/SPEC.md)와 작업 목록(loop/BACKLOG.md)을 작성한다.',
+};
+const shortOf = (skill) => SHORT[skill.id] || skill.description.slice(0, 160);
 
 /** AGENTS.md / 기타 지시 파일에 끼워넣는 짧은 포인터. 본문은 별도 파일에 둔다. */
-function pointerBlock(skill, target = '.agent/skills/all-night-loop.md') {
+function pointerBlock() {
   return [
     '## 자율 개발 루프 (all-night-loop)',
     '',
-    `사용자가 "밤새 돌려줘" / "자율 루프" / "혼자 개발해줘" / "/all-night-loop" 이라고 하면`,
-    `**\`${target}\` 을 읽고 그 절차를 따른다.**`,
+    '사용자가 "지시서 만들어줘" / "SPEC 써줘" / "/all-night-spec" 이라고 하면',
+    '**`.agent/skills/all-night-spec.md`** 를 읽고 그 절차를 따른다.',
+    '주제를 받아 `loop/SPEC.md` 와 `loop/BACKLOG.md` 를 쓴다. 구현은 시작하지 않는다.',
     '',
-    `핵심: 지시서 \`loop/SPEC.md\` 를 읽고 → \`loop/BACKLOG.md\` 에서 작업 **하나만** 골라 →`,
-    `구현 → 검증 → **통과 즉시 커밋** → \`loop/HANDOFF.md\`·\`loop/JOURNAL.md\` 에 인수인계 기록 → 종료.`,
-    `${runLine}`,
+    '사용자가 "밤새 돌려줘" / "자율 루프" / "혼자 개발해줘" / "/all-night-loop" 이라고 하면',
+    '**`.agent/skills/all-night-loop.md`** 를 읽고 그 절차를 따른다.',
+    '핵심: `loop/SPEC.md` 를 읽고 → `loop/BACKLOG.md` 에서 작업 **하나만** 골라 →',
+    '구현 → 검증 → **통과 즉시 커밋** → `loop/HANDOFF.md`·`loop/JOURNAL.md` 에 인수인계 기록 → 종료.',
+    runLine,
   ].join('\n');
 }
 
@@ -48,15 +55,18 @@ const claudeFiles = (ctx, base) => {
       path: `${base}/skills/${skill.name}/reference/spec-writing.md`,
       content: `${skill.reference}\n`,
     },
-    ...TEMPLATES.map((t) => ({
-      kind: 'file',
-      path: `${base}/skills/${skill.name}/templates/${t}.md`,
-      content: skill.templates[t],
-    })),
+    // 템플릿은 이를 나르는 스킬(loop)에만 딸려 간다.
+    ...(skill.templates
+      ? TEMPLATES.map((t) => ({
+          kind: 'file',
+          path: `${base}/skills/${skill.name}/templates/${t}.md`,
+          content: skill.templates[t],
+        }))
+      : []),
     {
       kind: 'file',
       path: `${base}/commands/${skill.name}.md`,
-      content: `${frontmatter({ description: '자율 개발 루프 한 사이클 (all-night-loop)' })}\n\n${bundleText}\n`,
+      content: `${frontmatter({ description: shortOf(skill) })}\n\n${bundleText}\n`,
     },
   ];
 };
@@ -95,7 +105,7 @@ export const adapters = [
         kind: 'file',
         path: `.cursor/rules/${ctx.skill.name}.mdc`,
         content: `${frontmatter({
-          description: SHORT,
+          description: shortOf(ctx.skill),
           globs: '',
           alwaysApply: false,
         })}\n\n${ctx.bundleText}\n`,
@@ -134,7 +144,7 @@ export const adapters = [
       {
         kind: 'file',
         path: `.github/prompts/${ctx.skill.name}.prompt.md`,
-        content: `${frontmatter({ mode: 'agent', description: '자율 개발 루프 한 사이클 (all-night-loop)' })}\n\n${ctx.bundleText}\n`,
+        content: `${frontmatter({ mode: 'agent', description: shortOf(ctx.skill) })}\n\n${ctx.bundleText}\n`,
       },
     ],
   },
@@ -156,7 +166,7 @@ export const adapters = [
       {
         kind: 'file',
         path: `.windsurf/rules/${ctx.skill.name}.md`,
-        content: `${frontmatter({ trigger: 'model_decision', description: SHORT })}\n\n${ctx.bundleText}\n`,
+        content: `${frontmatter({ trigger: 'model_decision', description: shortOf(ctx.skill) })}\n\n${ctx.bundleText}\n`,
       },
     ],
   },
@@ -171,7 +181,7 @@ export const adapters = [
         {
           kind: 'file',
           path: `${base}/command/${ctx.skill.name}.md`,
-          content: `${frontmatter({ description: '자율 개발 루프 한 사이클 (all-night-loop)' })}\n\n${ctx.bundleText}\n`,
+          content: `${frontmatter({ description: shortOf(ctx.skill) })}\n\n${ctx.bundleText}\n`,
         },
       ];
     },
@@ -183,7 +193,8 @@ export const adapters = [
     scopes: ['project'],
     plan: (ctx) => [
       { kind: 'file', path: `.agent/skills/${ctx.skill.name}.md`, content: `${ctx.bundleText}\n` },
-      { kind: 'block', path: 'AGENTS.md', content: pointerBlock(ctx.skill) },
+      // 블록은 두 스킬을 함께 안내하므로 한 번만 쓴다. 스킬마다 쓰면 서로 덮어쓴다.
+      ...(ctx.skill.id === 'loop' ? [{ kind: 'block', path: 'AGENTS.md', content: pointerBlock() }] : []),
     ],
   },
 ];

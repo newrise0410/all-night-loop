@@ -5,10 +5,11 @@ import { fileURLToPath } from 'node:url';
 import { install } from '../src/commands/install.js';
 import { init } from '../src/commands/init.js';
 import { loop } from '../src/commands/loop.js';
+import { spec } from '../src/commands/spec.js';
 import { doctor, list, printPrompt, guide, uninstall } from '../src/commands/misc.js';
 import { c, log, fail } from '../src/util.js';
 
-const BOOL = new Set(['all', 'global', 'force', 'dry-run', 'bundle', 'help', 'version']);
+const BOOL = new Set(['all', 'global', 'force', 'dry-run', 'bundle', 'interview', 'yolo', 'help', 'version']);
 
 /** 의존성 없는 최소 파서. --k=v, --k v, --flag, -h 를 지원한다. */
 function parseArgs(argv) {
@@ -39,11 +40,12 @@ ${c.bold('사용법')}
 
 ${c.bold('명령')}
   ${c.cyan('install')} [targets...]   스킬을 도구에 설치한다 (대상 생략 시 자동 감지)
-  ${c.cyan('init')}                   loop/{SPEC,BACKLOG,HANDOFF,JOURNAL}.md 생성
+  ${c.cyan('spec')} <주제>            주제로 지시서·백로그를 작성한다 (--interview 로 문답)
+  ${c.cyan('init')}                   loop/{SPEC,BACKLOG,HANDOFF,JOURNAL}.md 빈 템플릿 생성
   ${c.cyan('loop')}                   에이전트를 반복 실행해 밤새 돌린다
   ${c.cyan('doctor')}                 감지된 도구·CLI·루프 상태 점검
   ${c.cyan('list')}                   설치 가능한 대상과 실행기 목록
-  ${c.cyan('prompt')}                 1사이클 프롬프트를 stdout 으로 (임의 CLI 에 파이프)
+  ${c.cyan('prompt')} [loop|spec]     프롬프트를 stdout 으로 (임의 CLI 에 파이프)
   ${c.cyan('guide')}                  지시서(SPEC) 작성 5요소 가이드 출력
   ${c.cyan('uninstall')} [targets...] 설치한 파일·블록 제거
 
@@ -55,9 +57,14 @@ ${c.bold('옵션')}
   --force            사람이 만든 파일도 덮어쓴다
   --dry-run          무엇을 할지만 보여준다
 
-${c.bold('loop 옵션')}
+${c.bold('spec 옵션')}
+  --interview        9개 문답으로 상세 지시서를 만든다 (터미널 전용)
+  --force            이미 작성된 SPEC 을 덮어쓴다
+
+${c.bold('loop / spec 공통 옵션')}
   --agent <id>       claude | codex | gemini | cursor | opencode | aider  (기본: claude)
   --cmd "<c> {prompt}"  임의 CLI 로 실행
+  --yolo             에이전트의 승인 절차를 건너뛴다 (무인 실행에 필요, 신뢰하는 저장소에서만)
   --max <n>          최대 사이클 (기본: 50)
   --sleep <sec>      사이클 간 대기 (기본: 3)
 
@@ -65,7 +72,8 @@ ${c.bold('예시')}
   npm i -g all-night-loop
   anloop install --all              ${c.dim('# 이 저장소의 모든 도구에 설치')}
   anloop install claude --global    ${c.dim('# 모든 프로젝트에서 쓰도록 전역 설치')}
-  anloop init                       ${c.dim('# loop/SPEC.md 생성 → 직접 채운다')}
+  anloop spec "결제 재시도 로직 추가"        ${c.dim('# 주제만 주면 알아서 지시서 작성')}
+  anloop spec "..." --interview     ${c.dim('# 문답으로 상세 지시서 작성')}
   anloop loop --agent codex --max 20
   claude -p "$(anloop prompt)"      ${c.dim('# 한 사이클만 수동 실행')}
 `;
@@ -83,6 +91,7 @@ async function main() {
 
   switch (cmd) {
     case 'install': return install(argv);
+    case 'spec': return spec(argv);
     case 'init': return init(argv);
     case 'loop': return loop(argv);
     case 'doctor': return doctor(argv);
