@@ -1,6 +1,7 @@
 ---
 description: "자율 개발 루프 한 사이클: 지시서를 읽고 작업 하나만 구현·검증·커밋한 뒤 인수인계를 기록하고 멈춘다."
 ---
+<!-- all-night-loop:generated -->
 
 # All-Night Loop — 한 바퀴
 

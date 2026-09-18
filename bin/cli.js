@@ -9,7 +9,7 @@ import { spec } from '../src/commands/spec.js';
 import { doctor, list, printPrompt, guide, uninstall, usage, migrate } from '../src/commands/misc.js';
 import { c, log, fail } from '../src/util.js';
 
-const BOOL = new Set(['all', 'global', 'force', 'dry-run', 'bundle', 'interview', 'yolo', 'stdin', 'skip-spec-check', 'usage', 'all', 'help', 'version']);
+const BOOL = new Set(['all', 'global', 'force', 'dry-run', 'bundle', 'interview', 'yolo', 'stdin', 'skip-spec-check', 'usage', 'all', 'prune', 'help', 'version']);
 
 /** 의존성 없는 최소 파서. --k=v, --k v, --flag, -h 를 지원한다. */
 function parseArgs(argv) {
@@ -57,6 +57,7 @@ ${c.bold('옵션')}
   --dir <path>       대상 저장소 (기본: git 루트)
   --loop-dir <name>  루프 상태 디렉터리 (기본: loop)
   --force            사람이 만든 파일도 덮어쓴다
+  --prune            이전 버전이 남긴 생성물을 지운다 (install)
   --dry-run          무엇을 할지만 보여준다
 
 ${c.bold('spec 옵션')}

@@ -3,16 +3,26 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { loadSkill, loadSkills, getSkill, bundle, cyclePrompt, specPrompt } from '../src/skill.js';
 import { adapters, byId } from '../src/adapters.js';
-import { upsertBlock, removeBlock, writeFile } from '../src/util.js';
+import { upsertBlock, removeBlock, writeFile, isManaged, withMarker } from '../src/util.js';
 import { resolveRunner, buildArgs, which, RUNNERS, YOLO_RUNNERS, looksPermissionBlocked } from '../src/runner.js';
 
 const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'cli.js');
-const run = (args, cwd) => execFileSync('node', [CLI, ...args], { cwd, encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' } });
+/** 경고는 stderr 로 나간다 — 둘 다 모아야 단언이 헛돌지 않는다. */
+function run(args, cwd) {
+  const r = spawnSync('node', [CLI, ...args], { cwd, encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' } });
+  if (r.status !== 0) {
+    const e = new Error(`Command failed: ${args.join(' ')}\n${r.stderr || ''}`);
+    e.stdout = r.stdout;
+    e.stderr = r.stderr;
+    throw e;
+  }
+  return `${r.stdout || ''}${r.stderr || ''}`;
+}
 
 function tmpRepo() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anloop-'));
@@ -340,4 +350,52 @@ test('플러그인 마켓플레이스는 opt-in 이고 --all 에 끼지 않는�
     assert.ok(fs.existsSync(path.join(dir, `plugins/all-night-loop/commands/${n}.md`)));
   }
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('스킬 폴더의 파일은 내용 추측 없이 항상 갱신된다', () => {
+  const dir = tmpRepo();
+  const t = path.join(dir, '.claude/skills/all-night-loop/templates/journal.md');
+  fs.mkdirSync(path.dirname(t), { recursive: true });
+  // 표식이 전혀 없는 짧은 파일. 전에는 "사람이 만든 것"으로 오판돼 업데이트가 건너뛰어졌다.
+  fs.writeFileSync(t, '# JOURNAL\n');
+  run(['install', 'claude'], dir);
+  assert.ok(fs.readFileSync(t, 'utf8').length > 20, '소유한 폴더인데 갱신을 건너뛰었다');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('--prune 은 이전 버전 잔여물만 지우고 사용자 파일은 남긴다', () => {
+  const dir = tmpRepo();
+  run(['install', 'claude'], dir);
+  const tdir = path.join(dir, '.claude/skills/all-night-loop/templates');
+  fs.writeFileSync(path.join(tdir, 'OLDNAME.md'), '# 옛 템플릿\n');
+  const mine = path.join(dir, '.claude/commands/my-own.md');
+  fs.writeFileSync(mine, '# 내가 쓴 커맨드\n');
+
+  const out = run(['install', 'claude'], dir);
+  assert.match(out, /이전 버전이 남긴 파일/);
+  assert.ok(fs.existsSync(path.join(tdir, 'OLDNAME.md')), 'prune 없이 지웠다');
+
+  run(['install', 'claude', '--prune'], dir);
+  assert.ok(!fs.existsSync(path.join(tdir, 'OLDNAME.md')), '잔여물이 남았다');
+  // .claude/commands/ 는 사용자 파일이 섞이는 곳이라 건드리지 않는다
+  assert.ok(fs.existsSync(mine), '사용자 파일을 지웠다');
+  assert.deepEqual(
+    fs.readdirSync(tdir).sort(),
+    ['backlog.md', 'design.md', 'inbox.md', 'journal.md', 'status.md'],
+  );
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('all-night-spec 생성물도 관리 대상으로 인식된다', () => {
+  // isManaged 가 'all-night-loop' 한 문자열만 보던 때, spec 쪽 파일은 매번 건너뛰어졌다
+  // 공유 폴더에 쓰는 파일에는 표식이 박힌다 → 다음 업데이트 때 우리 것으로 인식된다
+  const specCmd = withMarker(bundle(getSkill('spec')), '.claude/commands/all-night-spec.md');
+  assert.ok(specCmd.includes('all-night-loop:generated'));
+  assert.ok(isManaged(specCmd), 'spec 생성물이 관리 대상으로 안 잡힌다');
+  assert.ok(isManaged(withMarker(bundle(getSkill('loop')), '.cursor/rules/x.mdc')));
+  assert.ok(!isManaged('# 내가 손으로 쓴 규칙\n아무 표식 없음'));
+
+  // frontmatter 가 있으면 그 뒤에 들어가야 한다 — 앞에 넣으면 frontmatter 가 깨진다
+  const withFm = withMarker('---\nname: x\n---\n\n# 본문\n', 'a.md');
+  assert.ok(withFm.startsWith('---\nname: x\n---\n<!--'), withFm.slice(0, 40));
 });

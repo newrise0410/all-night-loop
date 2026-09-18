@@ -1,6 +1,7 @@
 ---
 description: 주제를 받아 저장소를 조사하고 자율 루프용 지시서(loop/design.md)와 작업 목록(loop/backlog.md)을 작성한다.
 ---
+<!-- all-night-loop:generated -->
 
 # All-Night Spec — 지시서 작성
 

@@ -29,16 +29,49 @@ export function exists(p) {
 
 export const MARK = 'all-night-loop';
 
-/** 우리가 생성한 파일인지. 사람이 손으로 쓴 파일을 덮어쓰지 않기 위한 방어. */
+/**
+ * 우리가 생성한 파일인지. 사람이 손으로 쓴 파일을 덮어쓰지 않기 위한 방어.
+ *
+ * 전에는 'all-night-loop' 문자열 하나만 봤다. 그러면 all-night-spec 쪽 생성물처럼
+ * 그 문자열이 없는 파일이 "사람이 만든 것"으로 오판돼 **업데이트가 조용히 건너뛰어진다**.
+ * 두 스킬 이름을 모두 보고, 앞으로는 명시적 표식도 함께 본다.
+ */
 export function isManaged(text) {
-  return text.slice(0, 2000).includes(MARK);
+  const head = text.slice(0, 4000);
+  return head.includes(`${MARK}:generated`) || head.includes(MARK) || head.includes('all-night-spec');
+}
+
+/**
+ * 우리가 통째로 소유한 경로인가.
+ *
+ * 스킬 폴더와 플러그인 폴더는 전부 우리가 만든 것이다 — 내용을 추측할 필요 없이 덮어써도 된다.
+ * 내용 추측(isManaged)은 `.claude/commands/` 나 `AGENTS.md` 처럼 사용자의 다른 파일이
+ * 섞이는 곳에만 쓴다. 추측에 기대면 표식 없는 짧은 템플릿이 "사람이 만든 것"으로 오판돼
+ * 업데이트가 조용히 건너뛰어진다.
+ */
+/**
+ * 공유 디렉터리(.claude/commands, .cursor/rules ...)에 쓰는 파일에 표식을 박는다.
+ * frontmatter 가 있으면 그 뒤에 넣는다 — 맨 앞에 넣으면 frontmatter 가 깨진다.
+ */
+export function withMarker(content, p) {
+  const tag = `${MARK}:generated`;
+  if (content.includes(tag)) return content;
+  if (p.endsWith('.toml')) return `# ${tag}\n${content}`;
+  if (!p.endsWith('.md') && !p.endsWith('.mdc')) return content;
+  const fm = /^---\r?\n[\s\S]*?\r?\n---\r?\n/.exec(content);
+  const line = `<!-- ${tag} -->\n`;
+  return fm ? content.slice(0, fm[0].length) + line + content.slice(fm[0].length) : line + content;
+}
+
+export function isOwnedPath(p) {
+  return /(^|\/)skills\/[^/]+\//.test(p) || p.startsWith('plugins/') || p.includes('/skills/');
 }
 
 /** 내용이 같으면 쓰지 않는다 — mtime 을 흔들면 에디터가 불필요하게 다시 읽는다. */
-export function writeFile(abs, content, { force = false, dryRun = false } = {}) {
+export function writeFile(abs, content, { force = false, dryRun = false, owned = false } = {}) {
   const prev = readIfExists(abs);
   if (prev === content) return 'same';
-  if (prev !== null && !force && !isManaged(prev)) return 'skipped';
+  if (prev !== null && !force && !owned && !isManaged(prev)) return 'skipped';
   if (dryRun) return prev === null ? 'create' : 'update';
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, content);

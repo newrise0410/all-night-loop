@@ -253,6 +253,22 @@ claude 에는 남은 금액을 `--max-budget-usd` 로 넘겨 한 사이클이 �
 그건 사람이 `design.md` 를 직접 고쳐야 한다 — 잠결에 적은 한 줄이 push 금지 같은
 안전장치를 풀면 아침에 되돌릴 수 없다.
 
+### 이미 설치한 것을 업데이트하기
+
+```bash
+npm i -g github:newrise0410/all-night-loop     # CLI 갱신
+anloop install --prune                          # 각 저장소에서 스킬 갱신 + 잔여물 정리
+anloop install --global --prune                 # 전역 설치했다면
+anloop migrate                                  # loop/ 가 옛 이름이면
+```
+
+`--prune` 은 **이전 버전이 만들었지만 이제는 안 만드는 파일**을 지운다. 스킬 폴더처럼
+우리가 통째로 소유한 곳에서만 지우고, `.claude/commands/` 처럼 사용자의 다른 파일이
+섞이는 곳은 건드리지 않는다. 안 주면 목록만 보여주고 지우지 않는다.
+
+Claude Code 는 **새 세션부터** 갱신된 스킬을 읽는다. 플러그인으로 설치했다면
+`/plugin marketplace update`.
+
 ### 예전 이름에서 옮기기
 
 `SPEC/BACKLOG/HANDOFF/JOURNAL/DONE` 을 쓰던 저장소는 옛 이름 그대로도 **읽힌다**(경고 1회).
