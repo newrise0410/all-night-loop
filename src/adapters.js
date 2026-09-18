@@ -21,7 +21,7 @@ const runLine = '한 사이클만 수행하고 멈춘다. 이어서 다음 작�
 // 원본 description 을 자르면 문장 중간에서 끊기므로 전용 요약을 쓴다.
 const SHORT = {
   loop: '자율 개발 루프 한 사이클: 지시서를 읽고 작업 하나만 구현·검증·커밋한 뒤 인수인계를 기록하고 멈춘다.',
-  spec: '주제를 받아 저장소를 조사하고 자율 루프용 지시서(loop/SPEC.md)와 작업 목록(loop/BACKLOG.md)을 작성한다.',
+  spec: '주제를 받아 저장소를 조사하고 자율 루프용 지시서(loop/design.md)와 작업 목록(loop/backlog.md)을 작성한다.',
 };
 const shortOf = (skill) => SHORT[skill.id] || skill.description.slice(0, 160);
 
@@ -35,12 +35,12 @@ function pointerBlock() {
     '',
     '사용자가 "지시서 만들어줘" / "SPEC 써줘" / "/all-night-spec" 이라고 하면',
     '**`.agent/skills/all-night-spec.md`** 를 읽고 그 절차를 따른다.',
-    '주제를 받아 `loop/SPEC.md` 와 `loop/BACKLOG.md` 를 쓴다. 구현은 시작하지 않는다.',
+    '주제를 받아 `loop/design.md` 와 `loop/backlog.md` 를 쓴다. 구현은 시작하지 않는다.',
     '',
     '사용자가 "밤새 돌려줘" / "자율 루프" / "혼자 개발해줘" / "/all-night-loop" 이라고 하면',
     '**`.agent/skills/all-night-loop.md`** 를 읽고 그 절차를 따른다.',
-    '핵심: `loop/SPEC.md` 를 읽고 → `loop/BACKLOG.md` 에서 작업 **하나만** 골라 →',
-    '구현 → 검증 → **통과 즉시 커밋** → `loop/HANDOFF.md`·`loop/JOURNAL.md` 에 인수인계 기록 → 종료.',
+    '핵심: `loop/design.md` 를 읽고 → `loop/backlog.md` 에서 작업 **하나만** 골라 →',
+    '구현 → 검증 → **통과 즉시 커밋** → `loop/status.md`·`loop/journal.md` 에 인수인계 기록 → 종료.',
     runLine,
   ].join('\n');
 }

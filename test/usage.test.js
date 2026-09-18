@@ -109,15 +109,14 @@ test('기록이 없으면 빈 배열, 깨진 줄은 건너뛴다', () => {
 
 test('프롬프트는 작업을 고른 뒤에 참조를 읽으라고 지시한다', () => {
   const p = cyclePrompt(undefined, { loopDir: 'loop', runId: 'r', cycle: 1 });
-  assert.ok(p.includes('이 단계에서 코드 파일을 읽지 마라'), '1단계 조기 읽기 금지가 빠졌다');
-  assert.ok(p.includes('### 2-1.'), '작업 선택 후 읽기 단계가 빠졌다');
-  assert.ok(p.indexOf('### 2-1.') > p.indexOf('### 2. 고르기'), '읽기 단계가 선택보다 앞에 있다');
-  assert.ok(p.includes('참조:'), 'BACKLOG 항목의 참조 줄 규칙이 빠졌다');
+  assert.ok(p.includes('이 단계에서 코드 파일은 열지 마라'), '읽기 단계의 조기 읽기 금지가 빠졌다');
+  assert.ok(p.includes('고른 **뒤에** 그 작업에 필요한 파일만 연다'), '작업 선택 후 읽기 규칙이 빠졌다');
+  assert.ok(p.includes('참조:'), 'backlog 항목의 참조 줄 규칙이 빠졌다');
 });
 
 test('프롬프트는 운영 기록 비대화를 막는 규칙을 담는다', () => {
   const p = cyclePrompt(undefined, { loopDir: 'loop', runId: 'r', cycle: 1 });
-  assert.ok(p.includes('DONE.md'), '완료 백로그 보관 규칙이 빠졌다');
+  assert.ok(p.includes('done.md'), '완료 백로그 보관 규칙이 빠졌다');
   assert.ok(/40줄/.test(p), 'HANDOFF 크기 제한이 빠졌다');
   assert.ok(p.includes('verify_attempts'), '검증 재시도 보고 규칙이 빠졌다');
 });

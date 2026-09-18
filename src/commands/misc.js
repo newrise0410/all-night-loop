@@ -1,11 +1,12 @@
 import path from 'node:path';
 import { adapters, byId } from '../adapters.js';
-import { loadSkill, loadSkills, getSkill, bundle, cyclePrompt } from '../skill.js';
-import { c, log, fail, expand, exists, removeBlock, findRoot, readIfExists } from '../util.js';
+import { loadSkill, loadSkills, getSkill, bundle, cyclePrompt, FILES, LEGACY } from '../skill.js';
+import { c, log, warn, fail, expand, exists, removeBlock, findRoot, readIfExists } from '../util.js';
 import { RUNNERS, which } from '../runner.js';
 import fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { readUsage, usagePath } from '../usage.js';
-import { formatSummary } from './loop.js';
+import { formatSummary, countInboxPending } from './loop.js';
 
 /** 한글은 터미널에서 두 칸을 먹는다. 표가 어긋나지 않게 표시폭 기준으로 채운다. */
 const width = (s) => [...s].reduce((n, ch) => n + (ch.codePointAt(0) > 0x1100 ? 2 : 1), 0);
@@ -31,15 +32,19 @@ export function doctor(argv) {
   log('');
   log(c.bold('루프 상태'));
   const dir = path.join(root, argv.loopDir || 'loop');
-  const spec = readIfExists(path.join(dir, 'SPEC.md'));
-  if (!spec) {
-    log(`  ${c.yellow('!')} loop/SPEC.md 없음 → ${c.cyan('anloop init')}`);
-  } else if (spec.includes('<검증 명령 1>')) {
-    log(`  ${c.yellow('!')} loop/SPEC.md 가 아직 템플릿이다 → 직접 채워야 루프가 돈다`);
+  const design = readIfExists(path.join(dir, FILES.design));
+  if (!design) {
+    const old = readIfExists(path.join(dir, 'SPEC.md'));
+    if (old) log(`  ${c.yellow('!')} 옛 이름 SPEC.md 가 있다 → ${c.cyan('anloop migrate')}`);
+    else log(`  ${c.yellow('!')} ${FILES.design} 없음 → ${c.cyan('anloop spec "주제"')}`);
+  } else if (design.includes('<검증 명령 1>')) {
+    log(`  ${c.yellow('!')} ${FILES.design} 가 아직 템플릿이다 → 직접 채워야 루프가 돈다`);
   } else {
-    log(`  ${c.green('o')} loop/SPEC.md 작성됨`);
+    log(`  ${c.green('o')} ${FILES.design} 작성됨`);
   }
-  const backlog = readIfExists(path.join(dir, 'BACKLOG.md'));
+  const inbox = readIfExists(path.join(dir, FILES.inbox));
+  if (inbox) log(`  ${c.dim('inbox')} 대기 ${countInboxPending(inbox)}건`);
+  const backlog = readIfExists(path.join(dir, FILES.backlog)) || readIfExists(path.join(dir, 'BACKLOG.md'));
   if (backlog) {
     const n = (s) => (backlog.match(new RegExp(`^\\s*-? ?\\[${s}\\]`, 'gm')) || []).length;
     log(`  ${c.dim('BACKLOG')} 대기 ${n(' ')} · 진행 ${n('~')} · 완료 ${n('x')} · 막힘 ${n('!')}`);
@@ -126,4 +131,50 @@ export function usage(argv) {
   } else {
     log(c.dim('\n  실행별 내역: ') + c.cyan('anloop usage --all'));
   }
+}
+
+/**
+ * 옛 이름(SPEC/BACKLOG/HANDOFF/JOURNAL/DONE)을 새 이름으로 옮긴다.
+ * 루프는 이걸 자동으로 하지 않는다 — 사람이 직접 실행할 때만 파일이 움직인다.
+ */
+export function migrate(argv) {
+  const root = argv.dir ? path.resolve(argv.dir) : findRoot();
+  const loopDir = argv.loopDir || 'loop';
+  const dir = path.join(root, loopDir);
+
+  const moves = Object.entries(LEGACY)
+    .map(([old, next]) => ({ old, next, from: path.join(dir, old), to: path.join(dir, next) }))
+    .filter((m) => fs.existsSync(m.from));
+
+  if (!moves.length) return log(c.green(`${loopDir}/ 에 옮길 옛 이름 파일이 없다.`));
+
+  for (const m of moves) {
+    // macOS·Windows 는 파일명 대소문자를 구분하지 않는다. BACKLOG.md → backlog.md 같은
+    // 대소문자만 다른 이름은 existsSync 가 "이미 있다"고 답하므로 따로 구분해야 한다.
+    const caseOnly = m.old.toLowerCase() === m.next.toLowerCase();
+    if (!caseOnly && fs.existsSync(m.to)) {
+      warn(`${loopDir}/${m.next} 가 이미 있다 — ${m.old} 는 그대로 둔다. 직접 합쳐라.`);
+      continue;
+    }
+    if (argv['dry-run']) {
+      log(`  ${c.cyan('~')} ${loopDir}/${m.old} → ${m.next}`);
+      continue;
+    }
+    // git 이 이름 변경을 추적하도록 git mv 를 먼저 시도한다. 대소문자만 바뀔 때는 -f 가 필요하다.
+    const args = caseOnly ? ['mv', '-f', m.old, m.next] : ['mv', m.old, m.next];
+    const tracked = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+    if (tracked.status !== 0) {
+      // 추적되지 않은 파일이거나 git 이 없을 때. 대소문자만 바뀌면 임시 이름을 거쳐야 한다.
+      if (caseOnly) {
+        const tmp = path.join(dir, `${m.next}.anloop-tmp`);
+        fs.renameSync(m.from, tmp);
+        fs.renameSync(tmp, m.to);
+      } else {
+        fs.renameSync(m.from, m.to);
+      }
+    }
+    log(`  ${c.green('→')} ${loopDir}/${m.old} → ${m.next}`);
+  }
+  if (argv['dry-run']) return log(c.yellow('\ndry-run — 아무것도 옮기지 않았다.'));
+  log(c.dim('\n커밋은 직접 해라. 옮긴 것 말고 다른 변경이 섞여 있을 수 있다.'));
 }

@@ -16,7 +16,7 @@ anloop loop                     # 밤새 돌린다
 
 ## 지시서 만들기
 
-루프의 품질은 전부 `loop/SPEC.md` 에서 결정된다. **루프는 SPEC 보다 똑똑해지지 않는다.**
+루프의 품질은 전부 `loop/design.md` 에서 결정된다. **루프는 SPEC 보다 똑똑해지지 않는다.**
 그래서 SPEC 을 세 가지 방법으로 만들 수 있다.
 
 ```bash
@@ -164,7 +164,7 @@ Claude Code 안에서는 `/all-night-loop` (1사이클) 또는 `/loop /all-night
 실제로 돌려본 예 — 빈 저장소에 `anloop spec` 으로 지시서를 만들고 `anloop loop --yolo --max 3` 을
 돌리면 3사이클 동안 작업 3개가 각각 기능 커밋 + 기록 커밋으로 쌓인다.
 
-에이전트는 stdout 에 `[loop] ALL DONE` 같은 신호를 내고 `loop/HANDOFF.md` 의 `상태` 줄에도 같은 값을 적는다.
+에이전트는 stdout 에 `[loop] ALL DONE` 같은 신호를 내고 `loop/status.md` 의 `상태` 줄에도 같은 값을 적는다.
 파일 쪽을 우선 신뢰한다 — stdout 은 유실될 수 있지만 파일은 남는다.
 
 ## Windows
@@ -211,20 +211,59 @@ claude 에는 남은 금액을 `--max-budget-usd` 로 넘겨 한 사이클이 �
 
 ## 상태 파일
 
-`anloop spec` 또는 `anloop init` 이 만든다. **모든 상태는 기억이 아니라 파일에 있다** — 다음 사이클의 에이전트는 기억이 없다.
+`anloop spec` 또는 `anloop init` 이 만든다. **모든 상태는 기억이 아니라 파일에 있다** — 다음 바퀴의
+에이전트는 기억이 전혀 없다.
 
-| 파일 | 역할 | 누가 쓰나 |
-|---|---|---|
-| `loop/SPEC.md` | 지시서. 무엇을/왜/어디까지 | **사람** (또는 `anloop spec`) |
-| `loop/BACKLOG.md` | 작업 목록 `[ ] [~] [x] [!]` | 루프 |
-| `loop/HANDOFF.md` | 다음 세션 인수인계 (매번 덮어씀) | 루프 |
-| `loop/JOURNAL.md` | 사이클별 로그 (append-only, 루프는 다시 읽지 않음) | 루프 |
-| `loop/DONE.md` | 완료된 백로그 보관 (루프는 다시 읽지 않음) | 루프 |
-| `loop/USAGE.jsonl` | 사이클별 사용량 (`--usage`) | 하네스 |
-| `loop/.state/` | 실행 중 상태. 자동으로 git 에서 제외된다 | 하네스·루프 |
+루프가 매 바퀴 읽는 순서는 **번호로 고정**돼 있다.
 
-**운영 기록은 매 사이클 입력에 그대로 들어간다.** 그래서 루프는 완료 항목을 `DONE.md` 로
-옮기고 `HANDOFF.md` 를 40줄 이하로 유지한다. 넘으면 하네스가 경고한다.
+| # | 파일 | 역할 | 누가 쓰나 |
+|---|---|---|---|
+| 1 | `loop/design.md` | 무엇을 만드는가. 거의 안 고침 | **사람** (또는 `anloop spec`) |
+| 2 | `loop/status.md` | 어디까지 했고 다음은 어디인가 | 루프 (매 바퀴 덮어씀) |
+| 3 | `loop/inbox.md` | **사용자 지시·피드백** | **사람**이 쓰고 루프가 처리표시 |
+| 4 | `loop/backlog.md` | 작업 목록 `[ ] [~] [x] [!] [?]` | 루프 |
+
+읽지 않는 보관 파일: `loop/journal.md`(바퀴별 로그) · `loop/done.md`(완료 백로그) ·
+`loop/USAGE.jsonl`(사용량) · `loop/.state/`(실행 중 상태, git 자동 제외)
+
+**운영 기록은 매 바퀴 입력에 그대로 들어간다.** 그래서 루프는 완료 항목을 `done.md` 로
+옮기고 `status.md` 를 40줄 이하로 유지한다. 넘으면 하네스가 경고한다.
+
+### inbox — 돌아가는 중에 지시하기
+
+밤새 도는 루프에 생각날 때마다 한두 문장씩 넣어두면, 다음 바퀴가 읽고 반영한다.
+
+```markdown
+## 대기
+
+- 재시도 기본 횟수를 3에서 4로 늘려라. 테스트도 같이 고쳐라.
+```
+
+반영하면 루프가 `## 처리됨` 으로 옮기고 결과를 덧붙인다 — 직접 지우지 않아도 되고
+같은 지시를 두 번 반영하지도 않는다.
+
+```markdown
+## 처리됨
+
+- 재시도 기본 횟수를 3에서 4로 늘려라. 테스트도 같이 고쳐라.
+  (2026-09-18 c1) `src/http.js` 의 `retries` 기본값을 4 로 바꾸고 테스트 1개 추가 — a739b76
+```
+
+**inbox 는 우선순위와 방향을 바꿀 수 있지만 `design.md` 의 금지 규칙은 뒤집지 못한다.**
+그건 사람이 `design.md` 를 직접 고쳐야 한다 — 잠결에 적은 한 줄이 push 금지 같은
+안전장치를 풀면 아침에 되돌릴 수 없다.
+
+### 예전 이름에서 옮기기
+
+`SPEC/BACKLOG/HANDOFF/JOURNAL/DONE` 을 쓰던 저장소는 옛 이름 그대로도 **읽힌다**(경고 1회).
+옮기려면:
+
+```bash
+anloop migrate          # --dry-run 으로 먼저 확인 가능
+```
+
+루프가 자동으로 옮기지는 않는다. 사람 없을 때 되돌리기 어려운 조작을 하지 않는다는
+이 프로젝트의 규칙을 하네스 자신도 지킨다.
 
 ## 지시서 작성 5요소
 
@@ -253,6 +292,7 @@ claude 에는 남은 금액을 `--max-budget-usd` 로 넘겨 한 사이클이 �
 anloop install [targets...]   스킬 설치 (--all / --global / --dry-run / --force / --dir)
 anloop spec <주제>            지시서·백로그 작성 (--interview / --force)
 anloop init                   loop/ 빈 템플릿 생성
+anloop migrate                옛 파일 이름을 새 이름으로 옮긴다
 anloop loop                   반복 실행 (--agent / --cmd / --yolo / --max / --sleep
                               / --timeout / --max-time / --skip-spec-check)
 anloop usage                  사이클별 사용량·비용 집계 (--all)

@@ -6,7 +6,7 @@ import { install } from '../src/commands/install.js';
 import { init } from '../src/commands/init.js';
 import { loop } from '../src/commands/loop.js';
 import { spec } from '../src/commands/spec.js';
-import { doctor, list, printPrompt, guide, uninstall, usage } from '../src/commands/misc.js';
+import { doctor, list, printPrompt, guide, uninstall, usage, migrate } from '../src/commands/misc.js';
 import { c, log, fail } from '../src/util.js';
 
 const BOOL = new Set(['all', 'global', 'force', 'dry-run', 'bundle', 'interview', 'yolo', 'stdin', 'skip-spec-check', 'usage', 'all', 'help', 'version']);
@@ -41,9 +41,10 @@ ${c.bold('사용법')}
 ${c.bold('명령')}
   ${c.cyan('install')} [targets...]   스킬을 도구에 설치한다 (대상 생략 시 자동 감지)
   ${c.cyan('spec')} <주제>            주제로 지시서·백로그를 작성한다 (--interview 로 문답)
-  ${c.cyan('init')}                   loop/{SPEC,BACKLOG,HANDOFF,JOURNAL}.md 빈 템플릿 생성
+  ${c.cyan('init')}                   loop/{design,backlog,status,inbox,journal}.md 빈 템플릿 생성
   ${c.cyan('loop')}                   에이전트를 반복 실행해 밤새 돌린다
   ${c.cyan('usage')}                  사이클별 사용량·비용 집계 (--all 로 실행별 내역)
+  ${c.cyan('migrate')}                옛 파일 이름을 새 이름으로 옮긴다 (SPEC→design 등)
   ${c.cyan('doctor')}                 감지된 도구·CLI·루프 상태 점검
   ${c.cyan('list')}                   설치 가능한 대상과 실행기 목록
   ${c.cyan('prompt')} [loop|spec]     프롬프트를 stdout 으로 (임의 CLI 에 파이프)
@@ -102,6 +103,7 @@ async function main() {
     case 'init': return init(argv);
     case 'loop': return loop(argv);
     case 'usage': return usage(argv);
+    case 'migrate': return migrate(argv);
     case 'doctor': return doctor(argv);
     case 'list': return list(argv);
     case 'prompt': return printPrompt(argv);

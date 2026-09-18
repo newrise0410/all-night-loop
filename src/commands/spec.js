@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
-import { specPrompt, loadSkill, TEMPLATES } from '../skill.js';
+import { specPrompt, loadSkill, TEMPLATES, FILES } from '../skill.js';
 import { resolveRunner, runOnce, buildArgs, checkWindowsLimits, warnIfMissing } from '../runner.js';
 import { c, log, warn, fail, findRoot, readIfExists } from '../util.js';
 
@@ -81,7 +81,7 @@ function draftFromAnswers(topic, answers, dir) {
   };
   const orTodo = (v, hint) => (v ? v : `<${hint} — 직접 채울 것>`);
   const lines = [
-    '# 지시서 (SPEC)',
+    '# DESIGN — 무엇을 만드는가',
     '',
     '> 인터뷰 답변으로 만든 **초안**이다. 에이전트가 저장소를 조사하지 않았으므로 직접 검토해야 한다.',
     '> 작성법: `anloop guide`',
@@ -144,13 +144,13 @@ function draftFromAnswers(topic, answers, dir) {
     '',
   ];
   const text = lines.filter((l) => l !== null).join('\n').replace(/\n{3,}/g, '\n\n');
-  fs.writeFileSync(path.join(dir, 'SPEC.md'), text.trimEnd() + '\n');
+  fs.writeFileSync(path.join(dir, FILES.design), text.trimEnd() + '\n');
 
   const first = get('first');
   fs.writeFileSync(
-    path.join(dir, 'BACKLOG.md'),
+    path.join(dir, FILES.backlog),
     [
-      '# BACKLOG',
+      '# BACKLOG — 작업 목록',
       '',
       '상태: `[ ]` 대기 · `[~]` 진행중 · `[x]` 완료 · `[!]` 막힘 · `[?]` 제안(루프는 실행하지 않는다)',
       '',
@@ -177,9 +177,9 @@ export async function spec(argv) {
   if (!topic) fail('주제가 없다.\n  anloop spec "결제 모듈에 재시도 로직 추가"\n  anloop spec "..." --interview');
 
   // SPEC 이 이미 채워져 있으면 덮어쓰지 않는다 — 사람이 승인한 지시서다.
-  const existing = readIfExists(path.join(dir, 'SPEC.md'));
+  const existing = readIfExists(path.join(dir, FILES.design));
   if (existing && !existing.includes('<검증 명령 1>') && !argv.force) {
-    fail(`${loopDir}/SPEC.md 가 이미 작성돼 있다. 덮어쓰려면 --force.`);
+    fail(`${loopDir}/${FILES.design} 가 이미 작성돼 있다. 덮어쓰려면 --force.`);
   }
 
   fs.mkdirSync(dir, { recursive: true });
@@ -201,7 +201,7 @@ export async function spec(argv) {
   const runner = resolveRunner(argv);
   const { cmd, argTemplate, useStdin } = runner;
   checkWindowsLimits(runner, prompt);
-  log(c.bold('\n지시서 작성') + c.dim(` — ${cmd} · ${loopDir}/SPEC.md`));
+  log(c.bold('\n지시서 작성') + c.dim(` — ${cmd} · ${loopDir}/${FILES.design}`));
   warnIfMissing(cmd);
 
   const { code, error } = await runOnce(cmd, buildArgs(argTemplate, prompt, useStdin), root, useStdin ? prompt : null, Number(argv.timeout ?? 1800) * 1000);
@@ -210,21 +210,21 @@ export async function spec(argv) {
     warn(error ? `${cmd} 실행 실패: ${error.message}` : `${cmd} 가 종료코드 ${code} 로 끝났다.`);
     if (answers) {
       draftFromAnswers(topic, answers, dir);
-      log(c.yellow(`\n인터뷰 답변만으로 ${loopDir}/SPEC.md 초안을 썼다.`));
+      log(c.yellow(`\n인터뷰 답변만으로 ${loopDir}/${FILES.design} 초안을 썼다.`));
       log(c.dim('저장소 조사가 빠진 초안이다 — 검증 명령이 실제로 도는지 직접 확인해라.'));
       return;
     }
     fail('지시서를 만들지 못했다. --cmd 로 에이전트를 직접 지정하거나 --interview 로 다시 시도해라.');
   }
 
-  const written = readIfExists(path.join(dir, 'SPEC.md')) || '';
+  const written = readIfExists(path.join(dir, FILES.design)) || '';
   const left = (written.match(/<[^>\n]{2,60}>/g) || []).length;
   log('');
   if (!written || written.includes('<검증 명령 1>')) {
-    warn(`${loopDir}/SPEC.md 가 갱신되지 않았다. 에이전트 출력을 확인해라.`);
+    warn(`${loopDir}/${FILES.design} 가 갱신되지 않았다. 에이전트 출력을 확인해라.`);
   } else {
-    log(c.green(`${loopDir}/SPEC.md · ${loopDir}/BACKLOG.md 작성 완료.`));
+    log(c.green(`${loopDir}/${FILES.design} · ${loopDir}/${FILES.backlog} 작성 완료.`));
     if (left) log(c.yellow(`자리표시자 ${left}개가 남아 있다 — 직접 확인해라.`));
-    log(c.dim('다음: ') + `${loopDir}/SPEC.md 를 검토한 뒤 ` + c.cyan('anloop loop'));
+    log(c.dim('다음: ') + `${loopDir}/${FILES.design} 를 검토한 뒤 ` + c.cyan('anloop loop'));
   }
 }

@@ -1,4 +1,4 @@
-# 지시서 (SPEC)
+# DESIGN — 무엇을 만드는가
 
 > 이 파일은 **사람이 쓰고 루프는 읽기만** 한다.
 > 작성법: `.claude/skills/all-night-loop/reference/spec-writing.md`
@@ -47,11 +47,11 @@
 
 ## 4. 작업 순서
 
-1. **읽기** — SPEC / HANDOFF / BACKLOG / `git log` / 참조 파일
+1. **읽기** — design / status / inbox / backlog / `git log` / 참조 파일
 2. **만들기** — BACKLOG에서 작업 **하나만**
 3. **확인** — 위 검증 명령 실행 + 합격 기준 대조
 4. **커밋** — 통과 **즉시**
-5. **기록** — BACKLOG / HANDOFF / JOURNAL 갱신 후 커밋
+5. **기록** — backlog / status / inbox / journal 갱신 후 커밋
 
 ## 5. 커밋 규칙
 

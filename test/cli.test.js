@@ -31,14 +31,14 @@ test('스킬 2종이 frontmatter 와 함께 로드된다', () => {
   const s = loadSkill();
   assert.equal(s.name, 'all-night-loop');
   assert.ok(s.description.length > 20);
-  assert.ok(s.body.includes('실행 순서'));
+  assert.ok(s.body.includes('한 바퀴 순서'));
   assert.ok(s.reference.includes('합격 기준'));
-  assert.equal(Object.keys(s.templates).length, 4);
+  assert.equal(Object.keys(s.templates).length, 5);
 });
 
 test('번들: 실행용은 가이드를 빼고, 작성용은 담는다', () => {
   const loopBundle = bundle(getSkill('loop'));
-  assert.ok(loopBundle.includes('## 실행 순서'));
+  assert.ok(loopBundle.includes('## 한 바퀴 순서'));
   // 루프는 SPEC 을 읽고 실행할 뿐 작성하지 않는다 — 가이드는 매 사이클 낭비다
   assert.ok(!loopBundle.includes('지시서(SPEC) 작성'), '실행 번들에 작성 가이드가 붙었다');
 
@@ -53,7 +53,7 @@ test('번들: 실행용은 가이드를 빼고, 작성용은 담는다', () => {
   for (const b of [loopBundle, specBundle]) {
     assert.ok(!b.includes("'''"), 'TOML 리터럴 문자열을 깨뜨릴 수 있다');
   }
-  assert.ok(cyclePrompt().includes('정확히 한 사이클만'));
+  assert.ok(cyclePrompt().includes('정확히 한 바퀴만'));
 });
 
 test('모든 어댑터가 유효한 계획을 낸다', () => {
@@ -110,7 +110,7 @@ test('사람이 쓴 파일은 덮어쓰지 않는다 (--force 로만)', () => {
   run(['install', 'cline'], dir);
   assert.equal(fs.readFileSync(target, 'utf8'), '# 내가 손으로 쓴 규칙\n');
   run(['install', 'cline', '--force'], dir);
-  assert.ok(fs.readFileSync(target, 'utf8').includes('실행 순서'));
+  assert.ok(fs.readFileSync(target, 'utf8').includes('한 바퀴 순서'));
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -138,12 +138,12 @@ test('AGENTS.md 블록은 기존 내용을 보존한 채 갱신·제거된다', 
 test('init 이 loop 파일 4개를 만들고 기존 파일을 보존한다', () => {
   const dir = tmpRepo();
   run(['init'], dir);
-  for (const f of ['SPEC', 'BACKLOG', 'HANDOFF', 'JOURNAL']) {
+  for (const f of ['design', 'backlog', 'status', 'inbox', 'journal']) {
     assert.ok(fs.existsSync(path.join(dir, 'loop', `${f}.md`)));
   }
-  fs.writeFileSync(path.join(dir, 'loop', 'SPEC.md'), '내 지시서');
+  fs.writeFileSync(path.join(dir, 'loop', 'design.md'), '내 지시서');
   run(['init'], dir);
-  assert.equal(fs.readFileSync(path.join(dir, 'loop', 'SPEC.md'), 'utf8'), '내 지시서');
+  assert.equal(fs.readFileSync(path.join(dir, 'loop', 'design.md'), 'utf8'), '내 지시서');
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -158,7 +158,7 @@ test('HANDOFF 자리표시자를 종료 신호로 오인하지 않는다', async
   run(['init'], dir);
   const { default: mod } = await import('../src/commands/loop.js').then((m) => ({ default: m }));
   // 템플릿 그대로일 때는 멈추지 않아야 하고, 값을 채우면 멈춰야 한다.
-  const handoff = path.join(dir, 'loop', 'HANDOFF.md');
+  const handoff = path.join(dir, 'loop', 'status.md');
   const probe = () => {
     const out = run(['doctor'], dir); // 사이드이펙트 없는 호출로 파일 상태만 유지
     return out;
@@ -194,7 +194,7 @@ test('생성된 Gemini TOML 이 파싱 가능한 형태다', () => {
 
 test('spec 프롬프트는 주제를 절차보다 먼저 놓는다', () => {
   const p = specPrompt('결제 재시도 로직');
-  assert.ok(p.indexOf('결제 재시도 로직') < p.indexOf('# all-night-spec'), '주제가 절차 뒤에 묻혔다');
+  assert.ok(p.indexOf('결제 재시도 로직') < p.indexOf('# All-Night Spec'), '주제가 절차 뒤에 묻혔다');
   assert.ok(p.includes('구현은 시작하지 마라'));
   assert.ok(!p.includes('## 인터뷰 답변\n'), '답변이 없는데 인터뷰 블록이 들어갔다');
 });
@@ -220,13 +220,13 @@ test('spec 이 에이전트를 부르고 SPEC·BACKLOG 를 남긴다', () => {
   const agent = path.join(dir, 'agent.sh');
   fs.writeFileSync(
     agent,
-    ["#!/bin/bash", "cat > loop/SPEC.md <<'EOF'", '# 지시서', '- [ ] `npm test` 통과', 'EOF',
-     "cat > loop/BACKLOG.md <<'EOF'", '# BACKLOG', '- [ ] T001 — 첫 작업', 'EOF', ''].join('\n'),
+    ["#!/bin/bash", "cat > loop/design.md <<'EOF'", '# 지시서', '- [ ] `npm test` 통과', 'EOF',
+     "cat > loop/backlog.md <<'EOF'", '# BACKLOG', '- [ ] T001 — 첫 작업', 'EOF', ''].join('\n'),
   );
   fs.chmodSync(agent, 0o755);
   const out = run(['spec', '재시도 로직 추가', '--cmd', `${agent} {prompt}`], dir);
   assert.match(out, /작성 완료/);
-  assert.ok(fs.readFileSync(path.join(dir, 'loop', 'SPEC.md'), 'utf8').includes('npm test'));
+  assert.ok(fs.readFileSync(path.join(dir, 'loop', 'design.md'), 'utf8').includes('npm test'));
 
   // 이미 작성된 SPEC 은 보호된다
   assert.throws(() => run(['spec', '다른 주제', '--cmd', `${agent} {prompt}`], dir), /Command failed/);
@@ -240,13 +240,13 @@ test('에이전트가 없으면 인터뷰 답변으로 SPEC 초안을 쓴다', (
   execFileSync('bash', ['-c', `node ${CLI} spec "주제" --interview --cmd "없는CLI {prompt}" < answers.txt`], {
     cwd: dir, encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' },
   });
-  const spec = fs.readFileSync(path.join(dir, 'loop', 'SPEC.md'), 'utf8');
+  const spec = fs.readFileSync(path.join(dir, 'loop', 'design.md'), 'utf8');
   assert.ok(spec.includes('- [ ] `npm test` 통과'), '검증 명령이 쪼개져 들어가야 한다');
   assert.ok(spec.includes('- [ ] `npm run lint` 통과'));
   assert.ok(spec.includes('- `src/a.ts`'));
   assert.ok(spec.includes('브랜치: feature 브랜치'));
-  assert.ok(/^# 지시서 \(SPEC\)\n\n>/.test(spec), '제목 뒤 빈 줄이 살아 있어야 한다');
-  assert.ok(fs.readFileSync(path.join(dir, 'loop', 'BACKLOG.md'), 'utf8').includes('T001 — 첫 작업'));
+  assert.ok(/^# DESIGN — 무엇을 만드는가\n\n>/.test(spec), '제목 뒤 빈 줄이 살아 있어야 한다');
+  assert.ok(fs.readFileSync(path.join(dir, 'loop', 'backlog.md'), 'utf8').includes('T001 — 첫 작업'));
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

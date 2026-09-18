@@ -5,7 +5,42 @@ import { fileURLToPath } from 'node:url';
 export const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const SKILL_DIR = path.join(PKG_ROOT, 'skill');
 export const TEMPLATE_DIR = path.join(SKILL_DIR, 'templates');
-export const TEMPLATES = ['SPEC', 'BACKLOG', 'HANDOFF', 'JOURNAL'];
+/**
+ * 상태 파일 이름. 여기 한 곳에서만 정의한다 —
+ * 전에는 문자열이 9곳에 흩어져 있어서 하나를 바꾸면 나머지가 조용히 어긋났다.
+ */
+export const FILES = {
+  design: 'design.md', // 무엇을 만드는가. 사람이 쓰고 거의 안 고침
+  backlog: 'backlog.md', // 작업 목록
+  status: 'status.md', // 어디까지 했고 다음은 어디인가. 매 바퀴 갱신
+  inbox: 'inbox.md', // 사용자 지시·피드백. 비동기 투입
+  journal: 'journal.md', // append-only 로그 (루프는 다시 읽지 않음)
+  done: 'done.md', // 완료 보관 (루프는 다시 읽지 않음)
+};
+
+/** 루프가 매 바퀴 읽는 순서. 번호가 곧 프롬프트의 읽기 순서다. */
+export const READ_ORDER = [
+  [FILES.design, '무엇을 만드는가'],
+  [FILES.status, '어디까지 했는가'],
+  [FILES.inbox, '사용자 지시'],
+  [FILES.backlog, '무엇이 남았는가'],
+];
+
+/**
+ * 옛 이름 → 새 이름. 구명 폴백과 `anloop migrate` 가 함께 쓴다.
+ * 자동 rename 은 하지 않는다 — 사람 없을 때 되돌리기 어려운 조작을 하지 않는다는
+ * 이 프로젝트의 규칙을 하네스 자신도 지켜야 한다.
+ */
+export const LEGACY = {
+  'SPEC.md': FILES.design,
+  'BACKLOG.md': FILES.backlog,
+  'HANDOFF.md': FILES.status,
+  'JOURNAL.md': FILES.journal,
+  'DONE.md': FILES.done,
+};
+
+/** `anloop init` 이 만드는 템플릿. 키가 곧 `skill/templates/<키>.md` 이다. */
+export const TEMPLATES = ['design', 'backlog', 'status', 'inbox', 'journal'];
 
 /** 플러그인 매니페스트의 version 을 패키지 버전과 묶는다 — 따로 놀면 한쪽만 올라간다. */
 export const PKG_VERSION = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, 'package.json'), 'utf8')).version;
@@ -71,7 +106,8 @@ export const loadSkill = () => getSkill('loop');
  * 13만자를 반복 전송한다. "있어도 안 읽으면 된다"는 문장은 입력량을 줄이지 못한다.
  */
 export function bundle(skill = loadSkill(), { withGuide = skill.id === 'spec' } = {}) {
-  const head = [`# ${skill.name}`, '', skill.body];
+  // 본문이 이미 H1 로 시작하면 제목을 또 붙이지 않는다 — 같은 제목이 두 줄 나간다.
+  const head = skill.body.startsWith('# ') ? [skill.body] : [`# ${skill.name}`, '', skill.body];
   if (!withGuide) return head.join('\n');
   return [
     ...head,
@@ -93,11 +129,7 @@ function stripH1(md) {
 /** 스킬 본문의 `loop/` 경로를 실제 상태 디렉터리로 바꾼다. */
 function retargetLoopDir(text, loopDir) {
   if (loopDir === 'loop') return text;
-  return text
-    .replace(/\bloop\/(SPEC|BACKLOG|HANDOFF|JOURNAL|DONE)\.md/g, `${loopDir}/$1.md`)
-    .replace(/\bloop\/USAGE\.jsonl/g, `${loopDir}/USAGE.jsonl`)
-    .replace(/`loop\/`/g, `\`${loopDir}/\``)
-    .replace(/\bloop\/\.state\b/g, `${loopDir}/.state`);
+  return text.replace(/\bloop\/(?=[\w.]|`)/g, `${loopDir}/`).replace(/`loop\/`/g, `\`${loopDir}/\``);
 }
 
 export const STATE_DIR = '.state';
@@ -109,45 +141,32 @@ export const RESULT_FILE = 'cycle.json';
  * 지난 사이클의 낡은 상태를 종료 신호로 오인하지 않는다.
  */
 export function cyclePrompt(skill = loadSkill(), { loopDir = 'loop', runId = null, cycle = null } = {}) {
-  const head = [
-    '아래 절차를 **정확히 한 사이클만** 수행하라. 작업 하나를 끝내고 커밋·기록한 뒤 멈춘다.',
-    '여러 작업을 이어서 하지 마라.',
-  ];
+  const head = ['아래 절차를 **정확히 한 바퀴만** 수행하라. 작업 하나를 끝내고 커밋·기록한 뒤 멈춘다.'];
   if (runId && cycle) {
     head.push(
       '',
-      '## 이번 사이클',
+      `## 이번 바퀴 — run_id \`${runId}\` · cycle \`${cycle}\``,
       '',
-      `- run_id: \`${runId}\``,
-      `- cycle: \`${cycle}\``,
-      '',
-      `마지막 단계에서 \`${loopDir}/${STATE_DIR}/${RESULT_FILE}\` 에 **이 값 그대로** 아래 JSON 을 써라.`,
-      '바깥 하네스는 이 파일만 보고 루프를 계속할지 정한다. run_id/cycle 이 다르면 무시된다.',
+      `끝에 \`${loopDir}/${STATE_DIR}/${RESULT_FILE}\` 에 **이 값 그대로** 결과를 써라.`,
+      '하네스는 이 파일만 본다. run_id/cycle 이 다르면 무시된다.',
       '',
       '```json',
-      '{',
-      `  "run_id": "${runId}",`,
-      `  "cycle": ${cycle},`,
-      '  "task": "T001",',
-      '  "status": "done | all_done | blocked | needs_spec",',
-      '  "verified": "실행한 검증 명령과 결과",',
-      '  "verify_attempts": 1,',
-      '  "commit": "작업 커밋 해시 (없으면 null)"',
-      '}',
+      `{"run_id":"${runId}","cycle":${cycle},"task":"T001","status":"done",` +
+        '"verified":"실행한 검증 명령과 결과","verify_attempts":1,"commit":"커밋 해시 또는 null"}',
       '```',
-      '',
-      '- `done` — 작업 하나를 끝냈고 남은 작업이 있다',
-      '- `all_done` — BACKLOG 에 `[ ]`/`[~]` 가 하나도 없다',
-      '- `blocked` — 3회 실패 등으로 사람이 필요하다 (커밋하지 않았다)',
-      '- `needs_spec` — 지시서가 모호해 판단 불가',
-      '',
-      '`verify_attempts` 는 검증 명령을 몇 번 돌렸는지다 (한 번에 통과했으면 1).',
-      '**검증을 실제로 통과하지 않았다면 `done`/`all_done` 을 쓰지 마라.**',
     );
   }
   let body = bundle(skill, { withGuide: false });
   // 계약을 머리말에 실었으면 본문의 같은 설명은 지운다 — 같은 내용을 두 번 보낼 이유가 없다.
-  if (runId && cycle) body = dropSection(body, '## 루프 종료 신호');
+  if (runId && cycle) {
+    body = dropSection(body, '## 루프 종료 신호');
+    head.push(
+      '',
+      'status: `done`(끝냈고 남은 작업 있음) · `all_done`(backlog 에 `[ ]`/`[~]` 없음) · ' +
+        '`blocked`(사람 필요, 커밋 안 함) · `needs_spec`(지시서 부족)',
+      '**검증을 실제로 통과하지 않았다면 `done`/`all_done` 을 쓰지 마라.** 이 파일이 유일한 근거다.',
+    );
+  }
   return [...head, '', retargetLoopDir(body, loopDir)].join('\n');
 }
 

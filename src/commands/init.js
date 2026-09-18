@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadSkill, TEMPLATES } from '../skill.js';
+import { loadSkill, TEMPLATES, FILES } from '../skill.js';
 import { c, log, findRoot } from '../util.js';
 
 export function init(argv) {
@@ -21,8 +21,8 @@ export function init(argv) {
 
   log('');
   log(c.bold('다음 할 일'));
-  log(`  1. ${c.cyan('loop/SPEC.md')} 를 채운다 ${c.dim('— 루프의 품질은 전부 여기서 결정된다')}`);
+  log(`  1. ${c.cyan(`${path.basename(dir)}/${FILES.design}`)} 를 채운다 ${c.dim('— 루프의 품질은 전부 여기서 결정된다')}`);
   log(`     작성법: ${c.dim('anloop guide')} ${c.dim('(지시서 5요소)')}`);
-  log(`  2. ${c.cyan('loop/BACKLOG.md')} 에 작업을 한 사이클 크기로 쪼개 적는다`);
+  log(`  2. ${c.cyan(`${path.basename(dir)}/${FILES.backlog}`)} 에 작업을 한 바퀴 크기로 쪼개 적는다`);
   log(`  3. ${c.cyan('anloop loop --agent claude')} ${c.dim('로 밤새 돌린다')}`);
 }

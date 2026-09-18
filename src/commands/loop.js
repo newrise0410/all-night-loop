@@ -2,13 +2,33 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { cyclePrompt, STATE_DIR, RESULT_FILE } from '../skill.js';
+import { cyclePrompt, STATE_DIR, RESULT_FILE, FILES, LEGACY } from '../skill.js';
 import { resolveRunner, withUsage, runOnce, buildArgs, checkWindowsLimits, warnIfMissing, looksPermissionBlocked } from '../runner.js';
 import { appendUsage, summarize, supportsUsage, fmtTokens } from '../usage.js';
 import { c, log, warn, fail, readIfExists, findRoot } from '../util.js';
 
 const STATUSES = ['done', 'all_done', 'blocked', 'needs_spec'];
 const STOP_STATUSES = new Set(['all_done', 'blocked', 'needs_spec']);
+
+const legacyWarned = new Set();
+
+/**
+ * 상태 파일을 읽는다. 새 이름이 없고 옛 이름이 있으면 그걸 읽고 한 번 경고한다.
+ * **자동으로 rename 하지 않는다** — 사람 없을 때 되돌리기 어려운 조작을 하지 않는다는
+ * 이 프로젝트의 규칙을 하네스 자신도 지켜야 한다. 옮기는 건 `anloop migrate` 가 한다.
+ */
+export function readState(root, loopDir, name) {
+  const fresh = readIfExists(path.join(root, loopDir, name));
+  if (fresh !== null) return fresh;
+  const old = Object.keys(LEGACY).find((k) => LEGACY[k] === name);
+  if (!old) return null;
+  const legacy = readIfExists(path.join(root, loopDir, old));
+  if (legacy !== null && !legacyWarned.has(name)) {
+    legacyWarned.add(name);
+    warn(`${loopDir}/${old} 를 읽었다. 새 이름은 ${name} 이다 — ${c.cyan('anloop migrate')} 로 옮겨라.`);
+  }
+  return legacy;
+}
 
 function git(root, args) {
   try {
@@ -23,10 +43,10 @@ function git(root, args) {
  *
  * 왜 커밋 해시만으로는 안 되는가: 스킬은 매 사이클 기록 커밋(`chore: loop log`)을 남긴다.
  * HEAD 만 보면 작업을 하나도 못 해도 매번 움직이므로 무진전 가드가 영원히 켜지지 않는다.
- * 그래서 **운영 기록(loop/) 밖의 산출물**과 **BACKLOG 의 작업 상태**를 따로 본다.
+ * 그래서 **운영 기록(loop/) 밖의 산출물**과 **backlog 의 작업 상태**를 따로 본다.
  */
 export function progressFingerprint(root, loopDir) {
-  const backlog = readIfExists(path.join(root, loopDir, 'BACKLOG.md')) || '';
+  const backlog = readState(root, loopDir, FILES.backlog) || '';
   return {
     // 작업 상태 표시만 뽑는다. 문구가 다듬어져도 상태가 그대로면 진전이 아니다.
     taskStates: (backlog.match(/^\s*-\s*\[[ ~x!?]\]\s*(\S+)/gm) || []).join('|'),
@@ -87,41 +107,59 @@ export function readResult(root, loopDir, runId, cycle) {
   };
 }
 
-/** BACKLOG 에 남은 작업 수. all_done 이 사실인지 교차 검증한다. */
+/** backlog 에 남은 작업 수. all_done 이 사실인지 교차 검증한다. */
 export function remainingTasks(root, loopDir) {
-  const backlog = readIfExists(path.join(root, loopDir, 'BACKLOG.md'));
+  const backlog = readState(root, loopDir, FILES.backlog);
   if (backlog === null) return null;
   return (backlog.match(/^\s*-\s*\[[ ~]\]/gm) || []).length;
 }
 
-/** SPEC 이 실행 가능한 상태인가. 템플릿 그대로면 밤새 헛돈다. */
-export function specReadiness(root, loopDir) {
-  const spec = readIfExists(path.join(root, loopDir, 'SPEC.md'));
-  if (spec === null) return { ready: false, why: `${loopDir}/SPEC.md 가 없다` };
-  if (spec.includes('<검증 명령 1>') || spec.includes('<검증 명령 — 직접 채울 것>')) {
-    return { ready: false, why: `${loopDir}/SPEC.md 가 아직 템플릿이다 — 검증 명령이 비어 있다` };
+/** design 이 실행 가능한 상태인가. 템플릿 그대로면 밤새 헛돈다. */
+export function designReadiness(root, loopDir) {
+  const f = `${loopDir}/${FILES.design}`;
+  const design = readState(root, loopDir, FILES.design);
+  if (design === null) return { ready: false, why: `${f} 가 없다` };
+  if (design.includes('<검증 명령 1>') || design.includes('<검증 명령 — 직접 채울 것>')) {
+    return { ready: false, why: `${f} 가 아직 템플릿이다 — 검증 명령이 비어 있다` };
   }
-  const placeholders = (spec.match(/<[^>\n]{2,80}>/g) || []).length;
-  if (placeholders > 3) {
-    return { ready: false, why: `${loopDir}/SPEC.md 에 자리표시자가 ${placeholders}개 남아 있다` };
-  }
+  const placeholders = (design.match(/<[^>\n]{2,80}>/g) || []).length;
+  if (placeholders > 3) return { ready: false, why: `${f} 에 자리표시자가 ${placeholders}개 남아 있다` };
   return { ready: true, placeholders };
 }
 
 /**
+ * inbox 의 `## 대기` 아래 항목 수. 사용자가 반영 여부를 볼 수 있게 매 바퀴 찍는다.
+ * 섹션은 정규식 lookahead 대신 제목으로 쪼개 찾는다 — JS 에는 `\Z` 가 없어서
+ * 파일 끝에서 끝나는 마지막 섹션을 놓친다.
+ */
+export function countInboxPending(text) {
+  if (!text) return 0;
+  const section = text
+    .split(/^##\s+/m)
+    .slice(1)
+    .find((b) => /^대기\s*$/m.test(b.split('\n')[0]));
+  if (!section) return 0;
+  // 주석(<!-- 예시 -->)은 세지 않는다 — 템플릿을 지시로 오인하면 매 바퀴 헛일을 한다.
+  const body = section.split('\n').slice(1).join('\n').replace(/<!--[\s\S]*?-->/g, '');
+  return (body.match(/^\s*-\s+\S/gm) || []).length;
+}
+
+export const pendingInbox = (root, loopDir) => countInboxPending(readState(root, loopDir, FILES.inbox));
+
+/**
  * 운영 기록이 커지면 매 사이클 입력이 같이 커진다.
- * HANDOFF 는 "다음 세션이 즉시 출발할 수 있는 최소한"이어야 하고, 완료 백로그는 DONE.md 로 뺀다.
+ * status 는 "다음 바퀴가 즉시 출발할 수 있는 최소한"이어야 하고, 완료 백로그는 done.md 로 뺀다.
  */
 function warnIfBloated(root, loopDir) {
-  const limits = { 'HANDOFF.md': 4000, 'BACKLOG.md': 12000 };
+  const limits = { [FILES.status]: 4000, [FILES.backlog]: 12000 };
   for (const [name, cap] of Object.entries(limits)) {
-    const text = readIfExists(path.join(root, loopDir, name));
+    const text = readState(root, loopDir, name);
     if (text && text.length > cap) {
       warn(
         `${loopDir}/${name} 가 ${text.length}자다 (권장 ${cap}자 이하). ` +
-          (name === 'BACKLOG.md'
-            ? `완료 항목을 ${loopDir}/DONE.md 로 옮겨라.`
-            : '다음 사이클 입력이 그만큼 커진다 — 핵심만 남겨라.'),
+          (name === FILES.backlog
+            ? `완료 항목을 ${loopDir}/${FILES.done} 로 옮겨라.`
+            : '다음 바퀴 입력이 그만큼 커진다 — 핵심만 남겨라.'),
       );
     }
   }
@@ -160,7 +198,7 @@ export async function loop(argv) {
   const { cmd, useStdin } = baseRunner;
 
   if (!argv['skip-spec-check']) {
-    const readiness = specReadiness(root, loopDir);
+    const readiness = designReadiness(root, loopDir);
     if (!readiness.ready) {
       fail(
         `${readiness.why}.\n` +
@@ -214,6 +252,8 @@ export async function loop(argv) {
     log(c.cyan(`\n──── cycle ${i}/${max} ${'─'.repeat(Math.max(0, 40 - String(i).length))}`));
     fs.rmSync(path.join(stateDir, RESULT_FILE), { force: true });
     warnIfBloated(root, loopDir);
+    const inbox = pendingInbox(root, loopDir);
+    if (inbox) log(c.dim(`  inbox 대기 ${inbox}건`));
 
     const runner = wantUsage
       ? withUsage(baseRunner, { budgetRemaining: budgetUsd == null ? null : budgetUsd - spentUsd })
@@ -290,7 +330,7 @@ export async function loop(argv) {
       if (result.ok && STOP_STATUSES.has(result.status)) {
         const left = remainingTasks(root, loopDir);
         if (result.status === 'all_done' && left) {
-          warn(`all_done 이라는데 BACKLOG 에 남은 작업이 ${left}개다. 보고를 믿지 않고 계속한다.`);
+          warn(`all_done 이라는데 backlog 에 남은 작업이 ${left}개다. 보고를 믿지 않고 계속한다.`);
         } else {
           log(result.status === 'all_done' ? c.green(`\n루프 종료: ${result.status}`) : c.yellow(`\n루프 종료: ${result.status}`));
           if (result.status === 'blocked' && !argv.yolo && !argv.cmd && looksPermissionBlocked(out)) hintYolo();
@@ -309,7 +349,7 @@ export async function loop(argv) {
       idleStreak++;
       log(c.yellow(`  진전 없음 — 작업 상태도 산출물도 그대로 (연속 ${idleStreak}회)`));
       if (idleStreak >= 2) {
-        log(c.yellow(`\n2회 연속 진전이 없다. 루프를 멈춘다 — ${loopDir}/HANDOFF.md 를 확인해라.`));
+        log(c.yellow(`\n2회 연속 진전이 없다. 루프를 멈춘다 — ${loopDir}/${FILES.status} 를 확인해라.`));
         if (!argv.yolo && !argv.cmd && looksPermissionBlocked(out)) hintYolo();
         return;
       }
